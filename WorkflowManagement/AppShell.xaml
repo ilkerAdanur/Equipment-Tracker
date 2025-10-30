@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Shell
+    x:Class="WorkflowManagement.AppShell"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:local="clr-namespace:WorkflowManagement"
+    xmlns:views="clr-namespace:WorkflowManagement.Views"
+    Shell.FlyoutBehavior="Disabled"
+    Title="WorkflowManagement">
+
+    <ShellContent
+        Title="İş Detayı"
+        ContentTemplate="{DataTemplate views:JobDetailsPage}"
+        Route="JobDetailsPage" />
+
+</Shell>

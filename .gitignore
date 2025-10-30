@@ -1,0 +1,81 @@
+# Visual Studio / .NET
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Build outputs
+bin/
+obj/
+out/
+
+# NuGet
+*.nupkg
+packages/
+project.lock.json
+.project.fragment.lock.json
+.nuget/
+
+# Rider/IDE
+.idea/
+.vscode/
+*.sln.iml
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+
+# Secrets / certificates
+*.pfx
+*.p12
+*.key
+*.cer
+*.der
+*.mobileprovision
+
+# Android
+*.apk
+*.ap_
+*.keystore
+.gradle/
+local.properties
+
+# iOS / MacCatalyst
+*.app
+*.ipa
+*.dSYM
+*.xcuserstate
+*/build/
+
+# Databases
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Mono / Xamarin / MAUI specific
+obj/**/ilc
+
+# Misc
+.vscode/
+
+# Ignore user-specific files
+*.userprefs
+
+# Thumbprint / token caches
+*.token
+
+# JetBrains Rider caches
+.idea/
+
+# Ensure Rider/VS caches are not checked
+*.suo
+*.user
+
+# Windows image file cache
+Thumbs.db
+
+# End of .gitignore
