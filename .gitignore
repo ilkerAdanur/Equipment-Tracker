@@ -4,29 +4,48 @@
 *.suo
 *.userosscache
 *.sln.docstates
+*.userprefs
 
 # Build outputs
-bin/
-obj/
+[Dd]ebug/
+[Rr]elease/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
 out/
+
+# .NET MAUI specific
+.mauiprogram
+.mauimac/
+.mauiandroid/
+.mauiios/
+.mauiwindows/
+**/*.workload.json
 
 # NuGet
 *.nupkg
+*.snupkg
 packages/
 project.lock.json
 .project.fragment.lock.json
 .nuget/
+*.nuget.props
+*.nuget.targets
 
 # Rider/IDE
 .idea/
 .vscode/
 *.sln.iml
+.localhistory/
 
 # macOS
 .DS_Store
+._*
 
 # Logs
 *.log
+[Bb]uild[Ll]og.*
 
 # Secrets / certificates
 *.pfx
@@ -35,47 +54,61 @@ project.lock.json
 *.cer
 *.der
 *.mobileprovision
+*.keystore
+*.jks
+*.p8
 
 # Android
 *.apk
+*.aab
+*.aar
 *.ap_
 *.keystore
 .gradle/
 local.properties
+google-services.json
 
 # iOS / MacCatalyst
 *.app
 *.ipa
 *.dSYM
+*.dSYM.zip
 *.xcuserstate
 */build/
+*.xcworkspace
+*.xcuserdatad
+*.xcscheme
+*.plist.bak
+
+# Windows
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+Thumbs.db
+Desktop.ini
 
 # Databases
 *.db
 *.db-journal
 *.sqlite
 *.sqlite3
+*.mdf
+*.ldf
+*.ndf
 
-# Mono / Xamarin / MAUI specific
-obj/**/ilc
+# Environment files
+.env
+.env.local
+.env.*
 
-# Misc
-.vscode/
+# Test Results
+[Tt]est[Rr]esult*/
 
-# Ignore user-specific files
-*.userprefs
+# Temporary Files
+[Tt]emp/
+[Tt]mp/
+*.tmp
+*.temp
 
-# Thumbprint / token caches
-*.token
-
-# JetBrains Rider caches
-.idea/
-
-# Ensure Rider/VS caches are not checked
-*.suo
-*.user
-
-# Windows image file cache
-Thumbs.db
-
-# End of .gitignore
+# Visual Studio Code
+.history/

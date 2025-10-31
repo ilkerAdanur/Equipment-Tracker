@@ -1,0 +1,87 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:EquipmentTracker.ViewModels"
+             xmlns:models="clr-namespace:EquipmentTracker.Models"
+             xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
+             x:Class="EquipmentTracker.Views.JobDetailsPage"
+             x:DataType="vm:JobDetailsViewModel"
+             Title="{Binding Title}"
+             BackgroundColor="{StaticResource Gray100}">
+
+    <ContentPage.Behaviors>
+        <toolkit:EventToCommandBehavior
+            EventName="Loaded"
+            Command="{Binding LoadDataCommand}" />
+    </ContentPage.Behaviors>
+
+    <VerticalStackLayout Spacing="10">
+
+        <Frame Padding="10" Margin="15,15,15,0" CornerRadius="10">
+            <Grid ColumnDefinitions="*,Auto,*" ColumnSpacing="10">
+                <Button Grid.Column="0" Text="&lt; Önceki İş" Command="{Binding PreviousJobCommand}" />
+
+                <Label Grid.Column="1" 
+                       Text="{Binding PageIndicator}" 
+                       FontSize="Medium" 
+                       FontAttributes="Bold"
+                       VerticalOptions="Center" />
+
+                <Button Grid.Column="2" Text="Sonraki İş &gt;" Command="{Binding NextJobCommand}" />
+            </Grid>
+        </Frame>
+
+        <ScrollView>
+            <VerticalStackLayout Spacing="10" Padding="15,5,15,15">
+
+                <Frame Padding="15" CornerRadius="10">
+                    <VerticalStackLayout Spacing="5">
+                        <Label Text="{Binding CurrentJob.JobName}" FontSize="Large" FontAttributes="Bold" />
+                        <BoxView HeightRequest="1" Color="LightGray" Margin="0,5"/>
+                        <Label Text="{Binding CurrentJob.JobOwner, StringFormat='İş Sahibi: {0}'}" />
+                        <Label Text="{Binding CurrentJob.JobNumber, StringFormat='İş No: {0}'}" />
+                        <Label Text="{Binding CurrentJob.Date, StringFormat='Tarih: {0:dd.MM.yyyy}'}" />
+                    </VerticalStackLayout>
+                </Frame>
+
+                <Label Text="EKİPMANLAR" FontSize="Medium" FontAttributes="Bold" Padding="5,10,5,0"/>
+
+                <CollectionView ItemsSource="{Binding CurrentJob.Equipments}">
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate x:DataType="models:Equipment">
+                            <Frame Margin="0,0,0,10" BorderColor="LightGray" Padding="10" CornerRadius="8">
+                                <VerticalStackLayout Spacing="5">
+
+                                    <Label FontSize="Medium" FontAttributes="Bold">
+                                        <Label.FormattedText>
+                                            <FormattedString>
+                                                <Span Text="{Binding Name}" />
+                                                <Span Text="{Binding EquipmentId, StringFormat=' ({0})'}" TextColor="Gray"/>
+                                            </FormattedString>
+                                        </Label.FormattedText>
+                                    </Label>
+                                    <BoxView HeightRequest="1" Color="LightGray"/>
+
+                                    <CollectionView ItemsSource="{Binding Parts}" Margin="10,5,0,0">
+                                        <CollectionView.ItemTemplate>
+                                            <DataTemplate x:DataType="models:EquipmentPart">
+                                                <Grid ColumnDefinitions="Auto, *, Auto" Padding="0,5">
+                                                    <Label Grid.Column="0" Text="{Binding PartId, StringFormat='{0}.'}" />
+                                                    <Label Grid.Column="1" Text="{Binding Name}" Margin="5,0,0,0" />
+                                                    <Label Grid.Column="2" Text="{Binding PartCode}" TextColor="Gray" />
+                                                </Grid>
+                                            </DataTemplate>
+                                        </CollectionView.ItemTemplate>
+                                    </CollectionView>
+
+                                </VerticalStackLayout>
+                            </Frame>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                </CollectionView>
+
+            </VerticalStackLayout>
+        </ScrollView>
+
+    </VerticalStackLayout>
+</ContentPage>
