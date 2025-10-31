@@ -1,16 +1,17 @@
-﻿using System.Collections.Generic;
-
+﻿// Dosya: Models/JobModel.cs
+using System.Collections.ObjectModel; // List yerine
 namespace EquipmentTracker.Models
 {
     public class JobModel
     {
-        public int Id { get; set; } // Veritabanı için (örn: 1, 2, 3)
-        public string JobNumber { get; set; } // Sizin istediğiniz numara (örn: 001)
-        public string JobOwner { get; set; } // Örn: STH ÇEVRE
-        public string JobName { get; set; } // Örn: AŞKALE ÇİMENTO...
+        public int Id { get; set; } // Veritabanı Anahtarı (Primary Key)
+        public string JobNumber { get; set; }
+        public string JobOwner { get; set; }
+        public string JobName { get; set; }
         public DateTime Date { get; set; }
 
-        // Hiyerarşi: Bir İş, birçok Ekipman'dan oluşur.
-        public List<Equipment> Equipments { get; set; } = new List<Equipment>();
+        // List<T> yerine ObservableCollection<T> kullanıyoruz.
+        // Bu, listeye yeni bir ekipman eklediğimizde UI'ın anında güncellenmesini sağlar.
+        public ObservableCollection<Equipment> Equipments { get; set; } = new();
     }
 }

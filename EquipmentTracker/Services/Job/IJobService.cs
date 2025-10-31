@@ -1,18 +1,11 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿// Dosya: Services/Job/IJobService.cs
 using EquipmentTracker.Models;
 
-
-namespace EquipmentTracker.Services.Job
+public interface IJobService
 {
-    public interface IJobService
-    {
-        // İleride API'ye bağlanacağımız için asenkron (async) tasarlıyoruz.
-        Task<List<JobModel>> GetAllJobsAsync();
-        Task<JobModel> GetJobByIdAsync(int jobId);
-        Task<bool> UpdateJobAsync(JobModel job);
-    }
+    Task<List<JobModel>> GetAllJobsAsync();
+    Task<JobModel> GetJobByIdAsync(int jobId); // <-- YENİ
+    Task AddJobAsync(JobModel newJob);
+    Task<string> GetNextJobNumberAsync();
+    Task<EquipmentPart> AddNewPartAsync(Equipment parentEquipment, EquipmentPart newPart);
 }

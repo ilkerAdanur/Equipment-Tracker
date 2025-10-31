@@ -1,12 +1,22 @@
-﻿namespace EquipmentTracker.Models
+﻿// Dosya: Models/Equipment.cs
+using System.Collections.ObjectModel;
+using System.Text.Json.Serialization; // Döngüsel referansı önlemek için (Gelecek için)
+
+namespace EquipmentTracker.Models
 {
     public class Equipment
     {
-        public string EquipmentId { get; set; } // Örn: 001
-        public string EquipmentCode { get; set; } // Örn: 001.001
-        public string Name { get; set; } // Örn: KARIŞTIRICI TANKI
+        public int Id { get; set; } // Veritabanı Anahtarı (Primary Key)
+        public string EquipmentId { get; set; }
+        public string EquipmentCode { get; set; }
+        public string Name { get; set; }
 
-        // Hiyerarşi: Bir Ekipman, birçok Parça'dan oluşur.
-        public List<EquipmentPart> Parts { get; set; } = new List<EquipmentPart>();
+        // Hiyerarşi (ObservableCollection olarak güncellendi)
+        public ObservableCollection<EquipmentPart> Parts { get; set; } = new();
+
+        // Veritabanı İlişkisi (Foreign Key)
+        public int JobId { get; set; }
+        [JsonIgnore] // JSON serileştirmede döngüleri engeller
+        public JobModel Job { get; set; }
     }
 }

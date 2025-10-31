@@ -59,6 +59,7 @@
 	<ItemGroup>
 		<PackageReference Include="CommunityToolkit.Maui" Version="8.0.0" />
 		<PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.0" />
 		<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
 		<PackageReference Include="Microsoft.Maui.Controls.Compatibility" Version="$(MauiVersion)" />
 		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="8.0.1" />
@@ -66,12 +67,25 @@
 
 	<ItemGroup>
 	  <Folder Include="Controls\" />
+	  <Folder Include="Services\Equipment\" />
 	</ItemGroup>
 
 	<ItemGroup>
 	  <Compile Update="Views\JobDetailsPage.xaml.cs">
 	    <DependentUpon>JobDetailsPage.xaml</DependentUpon>
 	  </Compile>
+	  <Compile Update="Views\AddNewJobPage.xaml.cs">
+	    <DependentUpon>AddNewJobPage.xaml</DependentUpon>
+	  </Compile>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <MauiXaml Update="Views\AddNewJobPage.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </MauiXaml>
+	  <MauiXaml Update="Views\JobListPage.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </MauiXaml>
 	</ItemGroup>
 
 </Project>

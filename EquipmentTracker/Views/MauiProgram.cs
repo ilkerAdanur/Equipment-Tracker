@@ -1,39 +1,59 @@
 ﻿// Dosya: MauiProgram.cs
 using CommunityToolkit.Maui;
-using EquipmentTracker.Services.Job;
 using EquipmentTracker;
-using EquipmentTracker.ViewModels;      // ViewModellarımız için
-using EquipmentTracker.Views;         // Sayfalarımız için
-using CommunityToolkit.Mvvm.ComponentModel;
+using EquipmentTracker.Data; // DataContext için bunu ekleyin
+using EquipmentTracker.Services.Job;
+using EquipmentTracker.ViewModels;
+using EquipmentTracker.Views;
+using Microsoft.EntityFrameworkCore; // AddDbContext ve UseSqlite için bunu ekleyin
+// ... (diğer using'ler)
 
-namespace EquipmentTracker.Views;
 public static class MauiProgram
 {
     public static MauiApp CreateMauiApp()
     {
         var builder = MauiApp.CreateBuilder();
-            builder
-                .UseMauiApp<App>()
-                .UseMauiCommunityToolkit()
-                .ConfigureFonts(fonts =>
-                {
-                    fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
-                    fonts.AddFont("OpenSans-Semibold.ttf", "OpenSansSemibold");
-                });
+        builder
+            .UseMauiApp<App>()
+            .UseMauiCommunityToolkit() // Bu zaten olmalı
+            .ConfigureFonts(fonts =>
+            {
+                // ... fontlar ...
+            });
+
+        // --- VERİTABANI YOLUNU AYARLAMA ---
+        // Veritabanı dosyasını cihazın kendi yerel depolama alanına koymak en güvenli yoldur.
+        // Örn: C:\Users\[KullaniciAdi]\AppData\Local\Packages\[...]\LocalState\tracker.db
+        string dbDirectory = "C://TrackerDatabase"; // 1. Klasör yolunu ayır
+        string dbPath = Path.Combine(dbDirectory, "tracker.db");
+
+        if (!Directory.Exists(dbDirectory))
+        {
+            Directory.CreateDirectory(dbDirectory);
+        }
+
 
         // --- BAĞIMLILIK KAYITLARI ---
 
-        // 1. Servisler: Uygulama boyunca tek bir JobService nesnesi yaşasın.
+        // 1. Veritabanı (DbContext) Kaydı:
+        // Uygulamaya DataContext'i ve SQLite kullanacağını, yolunun da bu olduğunu söylüyoruz.
+        builder.Services.AddDbContext<DataContext>(options =>
+            options.UseSqlite($"Data Source={dbPath}")
+        );
+
+        // 2. Servisler (Mevcut kodunuzdaki gibi)
         builder.Services.AddSingleton<IJobService, JobService>();
 
-        // 2. ViewModellar: Her sayfa için yeni bir ViewModel oluşturulsun.
+        // 3. ViewModellar (Mevcut kodunuzdaki gibi)
         builder.Services.AddTransient<JobDetailsViewModel>();
+        builder.Services.AddTransient<AddNewJobViewModel>();
+        builder.Services.AddTransient<JobListViewModel>();
 
-        // 3. View'ler (Sayfalar): Her istendiğinde yeni bir Sayfa oluşturulsun.
+
+        // 4. View'ler (Mevcut kodunuzdaki gibi)
         builder.Services.AddTransient<JobDetailsPage>();
-
-        // Not: Ekran görüntünüzdeki eski 'MainPage' artık kullanılmayacak.
-        // Onu silebilirsiniz veya bırakabilirsiniz, zararı yok.
+        builder.Services.AddTransient<AddNewJobPage>();
+        builder.Services.AddTransient<JobListPage>();
 
         return builder.Build();
     }
