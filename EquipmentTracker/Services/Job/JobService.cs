@@ -14,33 +14,26 @@ namespace EquipmentTracker.Services.Job
         {
             _context = context;
 
-            // Veritabanı ve tabloların var olduğundan emin ol.
             _context.Database.EnsureCreated();
 
-            // Veritabanını SADECE boşsa doldur
             SeedDataIfNeeded();
         }
 
-        // 1. TÜM İŞLERİ ÇEK (JobListPage için)
         public async Task<List<JobModel>> GetAllJobsAsync()
         {
-            // Sadece ana iş listesini al, detaylara (ekipman) gerek yok
             return await _context.Jobs
                 .OrderBy(j => j.JobNumber)
                 .ToListAsync();
         }
 
-        // 2. TEK BİR İŞİ DETAYLI ÇEK (JobDetailsPage için)
         public async Task<JobModel> GetJobByIdAsync(int jobId)
         {
-            // Hiyerarşiyi (İş -> Ekipmanlar -> Parçalar) tam olarak yükle
             return await _context.Jobs
                 .Include(j => j.Equipments)
                 .ThenInclude(e => e.Parts)
                 .FirstOrDefaultAsync(j => j.Id == jobId);
         }
 
-        // 3. YENİ İŞ NUMARASINI HESAPLA
         public async Task<string> GetNextJobNumberAsync()
         {
             var lastJob = await _context.Jobs
@@ -54,23 +47,14 @@ namespace EquipmentTracker.Services.Job
             return "001";
         }
 
-        // 4. YENİ İŞ EKLE
         public async Task AddJobAsync(JobModel newJob)
         {
             _context.Jobs.Add(newJob);
             await _context.SaveChangesAsync();
         }
 
-        // 5. YENİ PARÇA EKLE
-        public async Task<EquipmentPart> AddNewPartAsync(Equipment parentEquipment, EquipmentPart newPart)
-        {
-            newPart.EquipmentId = parentEquipment.Id;
-            _context.EquipmentParts.Add(newPart);
-            await _context.SaveChangesAsync();
-            return newPart;
-        }
 
-        // 6. VERİTABANINI DOLDUR (Seed)
+
         private void SeedDataIfNeeded()
         {
             // Veritabanında zaten hiç iş var mı?

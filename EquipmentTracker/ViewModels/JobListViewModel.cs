@@ -49,14 +49,14 @@ namespace EquipmentTracker.ViewModels
 
         // Yeni İş Ekle sayfasına git
         [RelayCommand]
-        async Task GoToAddNewJobAsync()
+        async Task GoToAddNewJob()
         {
             await Shell.Current.GoToAsync(nameof(AddNewJobPage));
         }
 
         // Detay sayfasına git (Parametre olarak JobId gönderir)
         [RelayCommand]
-        async Task GoToDetailsAsync(JobModel job)
+        async Task GoToDetails(JobModel job)
         {
             if (job == null) return;
 
