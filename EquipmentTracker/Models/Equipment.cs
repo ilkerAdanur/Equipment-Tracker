@@ -13,6 +13,7 @@ namespace EquipmentTracker.Models
 
         // Hiyerarşi (ObservableCollection olarak güncellendi)
         public ObservableCollection<EquipmentPart> Parts { get; set; } = new();
+        public ObservableCollection<EquipmentAttachment> Attachments { get; set; } = new();
 
         // Veritabanı İlişkisi (Foreign Key)
         public int JobId { get; set; }

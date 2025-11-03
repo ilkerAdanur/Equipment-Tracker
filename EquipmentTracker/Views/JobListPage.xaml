@@ -26,9 +26,11 @@
                         ItemsSource="{Binding Jobs}"
                         SelectionMode="None">
             <CollectionView.ItemTemplate>
-                <DataTemplate x:DataType="models:JobModel">
+                
+                <DataTemplate x:DataType="models:JobModel" >
                     <Frame BorderColor="Black" CornerRadius="5" Padding="0" Margin="10,5" HasShadow="True" BackgroundColor="Transparent">
                         <Grid ColumnDefinitions="*, Auto">
+                            
                             <Grid.GestureRecognizers>
                                 <TapGestureRecognizer 
                                     Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobListViewModel}}, Path=GoToDetailsCommand}"

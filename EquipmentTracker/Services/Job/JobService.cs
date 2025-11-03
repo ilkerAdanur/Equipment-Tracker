@@ -30,7 +30,9 @@ namespace EquipmentTracker.Services.Job
         {
             return await _context.Jobs
                 .Include(j => j.Equipments)
-                .ThenInclude(e => e.Parts)
+                .ThenInclude(e => e.Parts) // 1. Ekipmanların Parçalarını yükle
+                .Include(j => j.Equipments)
+                .ThenInclude(e => e.Attachments)
                 .AsNoTracking()
                 .FirstOrDefaultAsync(j => j.Id == jobId);
         }

@@ -61,13 +61,18 @@ namespace EquipmentTracker.ViewModels
                 : _allJobsMasterList.Where(j => // Arama doluysa, filtrele
                     j.JobName.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
                     j.JobNumber.Contains(SearchText, StringComparison.OrdinalIgnoreCase)
-                );
+                ).ToList(); // 2. Filtrelemeyi .ToList() ile hemen yap
 
-            Jobs.Clear();
-            foreach (var job in filteredJobs)
+            // 3. ÇÖZÜM: UI GÜNCELLEMESİNİ ANA THREAD'E ZORLA
+            // Bu, "Collection must be modified on the UI thread" çökmesini engeller.
+            MainThread.BeginInvokeOnMainThread(() =>
             {
-                Jobs.Add(job);
-            }
+                Jobs.Clear();
+                foreach (var job in filteredJobs)
+                {
+                    Jobs.Add(job);
+                }
+            });
         }
 
         // Yeni İş Ekle sayfasına git

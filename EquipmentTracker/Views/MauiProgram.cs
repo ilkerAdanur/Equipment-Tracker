@@ -2,6 +2,8 @@
 using CommunityToolkit.Maui;
 using EquipmentTracker;
 using EquipmentTracker.Data; // DataContext için bunu ekleyin
+using EquipmentTracker.Services.AttachmentServices;
+using EquipmentTracker.Services.EquipmentPartAttachmentServices;
 using EquipmentTracker.Services.EquipmentPartService;
 using EquipmentTracker.Services.EquipmentService;
 using EquipmentTracker.Services.Job;
@@ -26,13 +28,19 @@ public static class MauiProgram
         // --- VERİTABANI YOLUNU AYARLAMA ---
         // Veritabanı dosyasını cihazın kendi yerel depolama alanına koymak en güvenli yoldur.
         // Örn: C:\Users\[KullaniciAdi]\AppData\Local\Packages\[...]\LocalState\tracker.db
-        string dbDirectory = "C://TrackerDatabase"; // 1. Klasör yolunu ayır
-        string dbPath = Path.Combine(dbDirectory, "tracker.db");
+        string documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
 
-        if (!Directory.Exists(dbDirectory))
+        // 2. Onun içine 'TrackerDatabase' adında bir klasör yolu oluştur
+        string appDataDirectory = Path.Combine(documentsPath, "TrackerDatabase");
+
+        // 3. Bu klasörün var olduğundan emin ol (yoksa oluştur)
+        if (!Directory.Exists(appDataDirectory))
         {
-            Directory.CreateDirectory(dbDirectory);
+            Directory.CreateDirectory(appDataDirectory);
         }
+
+        // 4. Veritabanı dosyasının tam yolunu oluştur
+        string dbPath = Path.Combine(appDataDirectory, "tracker.db");
 
 
         // --- BAĞIMLILIK KAYITLARI ---
@@ -47,6 +55,8 @@ public static class MauiProgram
         builder.Services.AddSingleton<IJobService, JobService>();
         builder.Services.AddSingleton<IEquipmentService, EquipmentService>();
         builder.Services.AddSingleton<IEquipmentPartService, EquipmentPartService>();
+        builder.Services.AddSingleton<IAttachmentService, AttachmentService>();
+        builder.Services.AddSingleton<IEquipmentPartAttachmentService, EquipmentPartAttachmentService>();
 
         // 3. ViewModellar (Mevcut kodunuzdaki gibi)
         builder.Services.AddTransient<JobDetailsViewModel>();

@@ -15,7 +15,7 @@ namespace EquipmentTracker.ViewModels
         [ObservableProperty] string _jobName;
         [ObservableProperty] string _jobOwner;
         [ObservableProperty] DateTime _date = DateTime.Now; // Varsayılan tarih
-
+        
         public AddNewJobViewModel(IJobService jobService)
         {
             _jobService = jobService;
