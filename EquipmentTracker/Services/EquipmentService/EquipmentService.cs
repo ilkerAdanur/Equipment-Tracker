@@ -20,21 +20,11 @@ namespace EquipmentTracker.Services.EquipmentService
             newEquipment.JobId = parentJob.Id; // Foreign key'i (ilişkiyi) ayarla
             _context.Equipments.Add(newEquipment);
             await _context.SaveChangesAsync();
+
+            _context.Entry(newEquipment).State = EntityState.Detached;
+
             return newEquipment;
         }
-
-
-        public async Task<EquipmentPart> AddNewPartAsync(Equipment parentEquipment, EquipmentPart newPart)
-        {
-            newPart.EquipmentId = parentEquipment.Id; 
-            _context.EquipmentParts.Add(newPart);
-            await _context.SaveChangesAsync();
-            return newPart;
-        }
-
-
-
-
         public async Task<(string nextEquipId, string nextEquipCode)> GetNextEquipmentIdsAsync(JobModel parentJob)
         {
             string jobNum = parentJob.JobNumber;
@@ -56,25 +46,16 @@ namespace EquipmentTracker.Services.EquipmentService
             return (nextEquipId, nextEquipCode);
         }
 
-        public async Task<(string nextPartId, string nextPartCode)> GetNextPartIdsAsync(Equipment parentEquipment)
+        public async Task DeleteEquipmentAsync(int equipmentId)
         {
-            string equipCode = parentEquipment.EquipmentCode;
+            var equipmentToDelete = await _context.Equipments.FindAsync(equipmentId);
 
-            var lastPart = await _context.EquipmentParts
-                .Where(p => p.EquipmentId == parentEquipment.Id)
-                .OrderByDescending(p => p.PartId) 
-                .FirstOrDefaultAsync();
-
-            int nextId = 1;
-            if (lastPart != null && int.TryParse(lastPart.PartId, out int lastId))
+            if (equipmentToDelete != null)
             {
-                nextId = lastId + 1;
+                _context.Equipments.Remove(equipmentToDelete);
+                await _context.SaveChangesAsync();
             }
-
-            string nextPartId = nextId.ToString(); 
-            string nextPartCode = $"{equipCode}.{nextPartId}"; 
-
-            return (nextPartId, nextPartCode);
         }
+
     }
 }

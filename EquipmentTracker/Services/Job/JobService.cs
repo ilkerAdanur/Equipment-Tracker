@@ -31,6 +31,7 @@ namespace EquipmentTracker.Services.Job
             return await _context.Jobs
                 .Include(j => j.Equipments)
                 .ThenInclude(e => e.Parts)
+                .AsNoTracking()
                 .FirstOrDefaultAsync(j => j.Id == jobId);
         }
 
@@ -88,6 +89,16 @@ namespace EquipmentTracker.Services.Job
 
             _context.Jobs.AddRange(job1, job2);
             _context.SaveChanges();
+        }
+
+        public async Task DeleteJobAsync(int jobId)
+        {
+            var job = await _context.Jobs.FindAsync(jobId);
+            if (job != null)
+            {
+                _context.Jobs.Remove(job);
+                await _context.SaveChangesAsync();
+            }
         }
     }
 }

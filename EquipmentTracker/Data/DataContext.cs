@@ -14,5 +14,26 @@ namespace EquipmentTracker.Data
         public DataContext(DbContextOptions<DataContext> options) : base(options)
         {
         }
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            base.OnModelCreating(modelBuilder);
+
+            // Bir İş (JobModel) silindiğinde,
+            // ona bağlı tüm Ekipmanları (Equipments) da sil.
+            modelBuilder.Entity<JobModel>()
+                .HasMany(j => j.Equipments)
+                .WithOne(e => e.Job)
+                .HasForeignKey(e => e.JobId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Bir Ekipman (Equipment) silindiğinde,
+            // ona bağlı tüm Parçaları (Parts) da sil.
+            modelBuilder.Entity<Equipment>()
+                .HasMany(e => e.Parts)
+                .WithOne(p => p.Equipment)
+                .HasForeignKey(p => p.EquipmentId)
+                .OnDelete(DeleteBehavior.Cascade);
+        }
     }
 }

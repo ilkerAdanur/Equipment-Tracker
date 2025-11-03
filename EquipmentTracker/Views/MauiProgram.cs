@@ -2,6 +2,7 @@
 using CommunityToolkit.Maui;
 using EquipmentTracker;
 using EquipmentTracker.Data; // DataContext için bunu ekleyin
+using EquipmentTracker.Services.EquipmentPartService;
 using EquipmentTracker.Services.EquipmentService;
 using EquipmentTracker.Services.Job;
 using EquipmentTracker.ViewModels;
@@ -45,6 +46,7 @@ public static class MauiProgram
         // 2. Servisler (Mevcut kodunuzdaki gibi)
         builder.Services.AddSingleton<IJobService, JobService>();
         builder.Services.AddSingleton<IEquipmentService, EquipmentService>();
+        builder.Services.AddSingleton<IEquipmentPartService, EquipmentPartService>();
 
         // 3. ViewModellar (Mevcut kodunuzdaki gibi)
         builder.Services.AddTransient<JobDetailsViewModel>();

@@ -7,6 +7,7 @@
              x:DataType="vm:JobDetailsViewModel"
              Title="{Binding Title}"
              BackgroundColor="White">
+
     <ScrollView>
         <VerticalStackLayout Spacing="10" Padding="15">
 
@@ -42,36 +43,72 @@
                             <VerticalStackLayout Spacing="5">
 
                                 <Grid ColumnDefinitions="*, Auto">
-                                    <Label Grid.Column="0" FontSize="Medium" FontAttributes="Bold" TextColor="Black" VerticalOptions="Center">
-                                        <Label.FormattedText>
-                                            <FormattedString>
-                                                <Span Text="{Binding Name}" />
-                                                <Span Text="{Binding EquipmentId, StringFormat=' ({0})'}" TextColor="Gray"/>
-                                            </FormattedString>
-                                        </Label.FormattedText>
-                                    </Label>
+                                    <HorizontalStackLayout Grid.Column="0" VerticalOptions="Center">
+                                        <Label Text="{Binding Name}" 
+                                               FontSize="Medium" 
+                                               FontAttributes="Bold" 
+                                               TextColor="Black"/>
+                                        <Label Text="{Binding EquipmentId, StringFormat=' ({0})'}" 
+                                               TextColor="Gray"
+                                               FontSize="Medium"
+                                               FontAttributes="Bold"/>
+                                    </HorizontalStackLayout>
 
-                                    <Button Grid.Column="1" 
-                                            Text="(+)" 
+                                    <Button Grid.Column="3" 
+                                            Text="X"
+                                            BackgroundColor="{StaticResource Gray200}"
+                                            TextColor="Red"
+                                            FontAttributes="Bold"
                                             FontSize="Small"
                                             WidthRequest="50"
                                             HeightRequest="40"
+                                            Margin="0,0,-50,0"
+                                            Padding="0"
+                                            Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=DeleteEquipmentCommand}"
+                                            CommandParameter="{Binding .}"/>
+
+                                    <Button Grid.Column="1" 
+                                            Text="+" 
+                                            FontSize="Large"
+                                            WidthRequest="50"
+                                            HeightRequest="40"
+                                            Margin="0,0,55,0"
                                             Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=AddNewPartCommand}"
                                             CommandParameter="{Binding .}"/>
                                 </Grid>
 
+                                
                                 <BoxView HeightRequest="1" Color="{StaticResource Gray200}"/>
 
                                 <CollectionView ItemsSource="{Binding Parts}" Margin="10,5,0,0">
+                                    
                                     <CollectionView.ItemTemplate>
                                         <DataTemplate x:DataType="models:EquipmentPart">
                                             <Grid ColumnDefinitions="Auto, *, Auto" Padding="0,5">
-                                                <Label Grid.Column="0" Text="{Binding PartId, StringFormat='{0}.'}" TextColor="{StaticResource Gray900}"/>
-                                                <Label Grid.Column="1" Text="{Binding Name}" Margin="5,0,0,0" TextColor="Black"/>
-                                                <Label Grid.Column="2" Text="{Binding PartCode}" TextColor="{StaticResource Gray500}" />
+                                                <Label Grid.Column="0" Text="{Binding PartId, StringFormat='{0}.'}" TextColor="{StaticResource Gray900}"
+                                                       Margin="0,13,0,0"/>
+                                                <Label Grid.Column="1" Text="{Binding Name}" Margin="5,13,0,0" TextColor="Black"/>
+                                                <Label Grid.Column="2" Text="{Binding PartCode}" TextColor="{StaticResource Gray500}"
+                                                    Margin="0,13,50,0" />
+                                                <Button Grid.Column="3" 
+                                                        Text="X"
+                                                        BackgroundColor="{StaticResource Gray200}"
+                                                        TextColor="Red"
+                                                        FontAttributes="Bold"
+                                                        FontSize="Small"
+                                                        WidthRequest="40"
+                                                        HeightRequest="40"
+                                                        Margin="0,0,-60,0"
+                                                        Padding="0"
+                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=DeleteEquipmentPartCommand}"
+                                                        CommandParameter="{Binding .}"/>
+                                                
                                             </Grid>
+
+                                            
                                         </DataTemplate>
                                     </CollectionView.ItemTemplate>
+
                                 </CollectionView>
                             </VerticalStackLayout>
                         </Frame>
