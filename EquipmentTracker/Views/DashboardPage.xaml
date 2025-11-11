@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:EquipmentTracker.ViewModels"
+             xmlns:models="clr-namespace:EquipmentTracker.Models"
+             xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
+             x:Class="EquipmentTracker.Views.DashboardPage"
+             x:DataType="vm:DashboardViewModel"
+             Title="{Binding Title}"
+             BackgroundColor="{StaticResource Gray100}">
+    <ContentPage.Behaviors>
+        <toolkit:EventToCommandBehavior
+            EventName="Appearing"
+            Command="{Binding LoadStatisticsCommand}" />
+    </ContentPage.Behaviors>
+
+    <ContentPage.Resources>
+        <Style TargetType="Frame" x:Key="StatCard">
+            <Setter Property="Padding" Value="15"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="BackgroundColor" Value="White"/>
+            <Setter Property="BorderColor" Value="{StaticResource Gray300}"/>
+            <Setter Property="Margin" Value="5"/>
+        </Style>
+        <Style TargetType="Label" x:Key="StatValue">
+            <Setter Property="FontSize" Value="32"/>
+            <Setter Property="FontAttributes" Value="Bold"/>
+            <Setter Property="TextColor" Value="{StaticResource Primary}"/>
+            <Setter Property="HorizontalOptions" Value="Center"/>
+        </Style>
+        <Style TargetType="Label" x:Key="StatTitle">
+            <Setter Property="FontSize" Value="Small"/>
+            <Setter Property="TextColor" Value="{StaticResource Gray600}"/>
+            <Setter Property="HorizontalOptions" Value="Center"/>
+        </Style>
+    </ContentPage.Resources>
+
+    <Grid>
+        <ScrollView>
+            <VerticalStackLayout Padding="10">
+
+                <Label Text="Genel Bakış" FontSize="Large" FontAttributes="Bold" Margin="5,0,0,10" TextColor="Black"/>
+
+                <Grid ColumnDefinitions="*,*,*" RowDefinitions="Auto,Auto">
+                    <Frame Grid.Column="0" Grid.Row="0" Style="{StaticResource StatCard}">
+                        <VerticalStackLayout>
+                            <Label Text="{Binding Stats.TotalJobs}" Style="{StaticResource StatValue}"/>
+                            <Label Text="Toplam İş" Style="{StaticResource StatTitle}"/>
+                        </VerticalStackLayout>
+                    </Frame>
+                    <Frame Grid.Column="1" Grid.Row="0" Style="{StaticResource StatCard}">
+                        <VerticalStackLayout>
+                            <Label Text="{Binding Stats.TotalEquipments}" Style="{StaticResource StatValue}"/>
+                            <Label Text="Toplam Ekipman" Style="{StaticResource StatTitle}"/>
+                        </VerticalStackLayout>
+                    </Frame>
+                    <Frame Grid.Column="2" Grid.Row="0" Style="{StaticResource StatCard}">
+                        <VerticalStackLayout>
+                            <Label Text="{Binding Stats.TotalParts}" Style="{StaticResource StatValue}"/>
+                            <Label Text="Toplam Parça" Style="{StaticResource StatTitle}"/>
+                        </VerticalStackLayout>
+                    </Frame>
+                    <Frame Grid.Column="0" Grid.Row="1" Style="{StaticResource StatCard}">
+                        <VerticalStackLayout>
+                            <Label Text="{Binding Stats.TotalAttachments}" Style="{StaticResource StatValue}"/>
+                            <Label Text="Toplam Dosya" Style="{StaticResource StatTitle}"/>
+                        </VerticalStackLayout>
+                    </Frame>
+                </Grid>
+
+                <Label Text="İş Durumları" FontSize="Large" FontAttributes="Bold" Margin="5,20,0,10" TextColor="Black"/>
+
+                <Grid ColumnDefinitions="*,*,*">
+                    <Frame Grid.Column="0" Style="{StaticResource StatCard}" BorderColor="Orange">
+                        <VerticalStackLayout>
+                            <Label Text="{Binding Stats.PendingJobs}" Style="{StaticResource StatValue}" TextColor="Orange"/>
+                            <Label Text="Beklemede" Style="{StaticResource StatTitle}"/>
+                        </VerticalStackLayout>
+                    </Frame>
+                    <Frame Grid.Column="1" Style="{StaticResource StatCard}" BorderColor="Green">
+                        <VerticalStackLayout>
+                            <Label Text="{Binding Stats.ApprovedJobs}" Style="{StaticResource StatValue}" TextColor="Green"/>
+                            <Label Text="Onaylanmış" Style="{StaticResource StatTitle}"/>
+                        </VerticalStackLayout>
+                    </Frame>
+                    <Frame Grid.Column="2" Style="{StaticResource StatCard}" BorderColor="Red">
+                        <VerticalStackLayout>
+                            <Label Text="{Binding Stats.RejectedJobs}" Style="{StaticResource StatValue}" TextColor="Red"/>
+                            <Label Text="Reddedilmiş" Style="{StaticResource StatTitle}"/>
+                        </VerticalStackLayout>
+                    </Frame>
+                </Grid>
+
+                <Label Text="Analiz" FontSize="Large" FontAttributes="Bold" Margin="5,20,0,10" TextColor="Black"/>
+
+                <VerticalStackLayout>
+                    <Frame Style="{StaticResource StatCard}">
+                        <VerticalStackLayout Spacing="5">
+                            <Label Text="En Fazla Ekipmana Sahip İş" Style="{StaticResource StatTitle}" HorizontalOptions="Start"/>
+                            <Label Text="{Binding Stats.JobWithMostEquipment}" Style="{StaticResource StatValue}" FontSize="Large" HorizontalOptions="Start" TextColor="{StaticResource Black}"/>
+                        </VerticalStackLayout>
+                    </Frame>
+                    <Frame Style="{StaticResource StatCard}">
+                        <VerticalStackLayout Spacing="5">
+                            <Label Text="En Fazla Parçaya Sahip İş" Style="{StaticResource StatTitle}" HorizontalOptions="Start"/>
+                            <Label Text="{Binding Stats.JobWithMostParts}" Style="{StaticResource StatValue}" FontSize="Large" HorizontalOptions="Start" TextColor="{StaticResource Black}"/>
+                        </VerticalStackLayout>
+                    </Frame>
+                </VerticalStackLayout>
+
+            </VerticalStackLayout>
+        </ScrollView>
+
+        <Grid IsVisible="{Binding IsBusy}" BackgroundColor="#80000000">
+            <ActivityIndicator IsRunning="{Binding IsBusy}" Color="White" Scale="2" HorizontalOptions="Center" VerticalOptions="Center"/>
+        </Grid>
+    </Grid>
+</ContentPage>

@@ -1,5 +1,6 @@
 ﻿// Dosya: Services/Job/IJobService.cs
 using EquipmentTracker.Models;
+using EquipmentTracker.Models.Enums;
 
 namespace EquipmentTracker.Services.Job;
 
@@ -10,4 +11,5 @@ public interface IJobService
     Task AddJobAsync(JobModel newJob);
     Task DeleteJobAsync(int jobId);
     Task<string> GetNextJobNumberAsync();
+    Task UpdateJobApprovalAsync(int jobId, ApprovalStatus newStatus);
 }

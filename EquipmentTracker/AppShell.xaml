@@ -8,6 +8,13 @@
 
     <TabBar>
 
+        <Tab Title="Dashboard">
+            <ShellContent
+        Title="İstatistikler"
+        ContentTemplate="{DataTemplate local:DashboardPage}"
+        Route="DashboardPage" />
+        </Tab>
+        
         <Tab Title="Ana Sayfa">
             <ShellContent
                 Title="Tüm İşler"
@@ -21,6 +28,7 @@
                 ContentTemplate="{DataTemplate local:AddNewJobPage}"
                 Route="AddNewJobPage" />
         </Tab>
+        
 
         <Tab Title="Hakkında">
             <ShellContent

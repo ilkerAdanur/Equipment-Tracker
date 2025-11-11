@@ -7,6 +7,8 @@ using EquipmentTracker.Services.EquipmentPartAttachmentServices;
 using EquipmentTracker.Services.EquipmentPartService;
 using EquipmentTracker.Services.EquipmentService;
 using EquipmentTracker.Services.Job;
+using EquipmentTracker.Services.StatisticsService;
+using EquipmentTracker.Services.StatisticsServices;
 using EquipmentTracker.ViewModels;
 using EquipmentTracker.Views;
 using Microsoft.EntityFrameworkCore; // AddDbContext ve UseSqlite için bunu ekleyin
@@ -57,17 +59,20 @@ public static class MauiProgram
         builder.Services.AddSingleton<IEquipmentPartService, EquipmentPartService>();
         builder.Services.AddSingleton<IAttachmentService, AttachmentService>();
         builder.Services.AddSingleton<IEquipmentPartAttachmentService, EquipmentPartAttachmentService>();
+        builder.Services.AddSingleton<IStatisticsService, StatisticsService>();
 
         // 3. ViewModellar (Mevcut kodunuzdaki gibi)
         builder.Services.AddTransient<JobDetailsViewModel>();
         builder.Services.AddTransient<AddNewJobViewModel>();
         builder.Services.AddTransient<JobListViewModel>();
+        builder.Services.AddTransient<DashboardViewModel>();
 
 
         // 4. View'ler (Mevcut kodunuzdaki gibi)
         builder.Services.AddTransient<JobDetailsPage>();
         builder.Services.AddTransient<AddNewJobPage>();
         builder.Services.AddTransient<JobListPage>();
+        builder.Services.AddTransient<DashboardPage>();
 
         return builder.Build();
     }

@@ -2,12 +2,14 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using EquipmentTracker.Models;
+using EquipmentTracker.Models.Enums; // YENİ ENUM KULLANIMI
 using EquipmentTracker.Services.AttachmentServices;
 using EquipmentTracker.Services.EquipmentPartAttachmentServices;
 using EquipmentTracker.Services.EquipmentPartService;
 using EquipmentTracker.Services.EquipmentService;
 using EquipmentTracker.Services.Job;
 using System.Collections.ObjectModel;
+using System.Diagnostics; // Hata ayıklama için
 
 namespace EquipmentTracker.ViewModels
 {
@@ -16,7 +18,7 @@ namespace EquipmentTracker.ViewModels
     {
         private readonly IJobService _jobService;
         private readonly IEquipmentService _equipmentService;
-        private readonly IEquipmentPartService _partService;
+        private readonly IEquipmentPartService _partService; // Sizin isimlendirmeniz
         private readonly IAttachmentService _attachmentService;
         private readonly IEquipmentPartAttachmentService _equipmentPartAttachmentService;
 
@@ -26,15 +28,26 @@ namespace EquipmentTracker.ViewModels
         [ObservableProperty]
         int _jobId;
 
+        // --- YENİ ONAY DURUMU ÖZELLİKLERİ ---
+        [ObservableProperty]
+        bool _isPending; // Onay bekliyorsa
+
+        [ObservableProperty]
+        bool _isApproved; // Onaylandıysa
+
+        [ObservableProperty]
+        bool _isRejected; // Reddedildiyse
+
+        // Constructor (Sizin 5 servisinizi de alıyor)
         public JobDetailsViewModel(IJobService jobService,
                                  IEquipmentService equipmentService,
-                                 IEquipmentPartService partService,
+                                 IEquipmentPartService partService, // Sizin isimlendirmeniz
                                  IAttachmentService attachmentService,
                                  IEquipmentPartAttachmentService equipmentPartAttachmentService)
         {
             _jobService = jobService;
             _equipmentService = equipmentService;
-            _partService = partService;
+            _partService = partService; // Sizin isimlendirmeniz
             _attachmentService = attachmentService;
             _equipmentPartAttachmentService = equipmentPartAttachmentService;
             Title = "İş Detayı";
@@ -54,10 +67,17 @@ namespace EquipmentTracker.ViewModels
             try
             {
                 CurrentJob = await _jobService.GetJobByIdAsync(jobId);
-            }
-            catch (Exception ex)
-            {
-                await Shell.Current.DisplayAlert("Hata", "İş detayı yüklenemedi: " + ex.Message, "Tamam");
+
+                if (CurrentJob != null)
+                {
+                    Title = CurrentJob.JobName;
+                    // Onay durumuna göre arayüzü kontrol edecek bool'ları ayarla
+                    UpdateApprovalStatus();
+                }
+                else
+                {
+                    Title = "Detay Bulunamadı";
+                }
             }
             finally
             {
@@ -65,7 +85,50 @@ namespace EquipmentTracker.ViewModels
             }
         }
 
+        // Arayüzün durumunu güncelleyen yardımcı metot
+        private void UpdateApprovalStatus()
+        {
+            if (CurrentJob == null) return;
+            IsPending = CurrentJob.MainApproval == ApprovalStatus.Pending;
+            IsApproved = CurrentJob.MainApproval == ApprovalStatus.Approved;
+            IsRejected = CurrentJob.MainApproval == ApprovalStatus.Rejected;
+        }
 
+        // --- YENİ ONAY KOMUTLARI ---
+
+        [RelayCommand]
+        async Task ApproveJob()
+        {
+            if (CurrentJob == null) return;
+
+            // 1. Tehlikeli 'UpdateJobAsync' yerine yeni, güvenli metodu çağır
+            await _jobService.UpdateJobApprovalAsync(CurrentJob.Id, ApprovalStatus.Approved);
+
+            // 2. ViewModel'deki 'CurrentJob' nesnesini manuel olarak güncelle
+            CurrentJob.MainApproval = ApprovalStatus.Approved;
+
+            // 3. Arayüzü güncelle (butonları gizle, ekipmanları göster)
+            UpdateApprovalStatus();
+        }
+
+        [RelayCommand]
+        async Task RejectJob()
+        {
+            if (CurrentJob == null) return;
+
+            // 1. Tehlikeli 'UpdateJobAsync' yerine yeni, güvenli metodu çağır
+            await _jobService.UpdateJobApprovalAsync(CurrentJob.Id, ApprovalStatus.Rejected);
+
+            // 2. ViewModel'deki 'CurrentJob' nesnesini manuel olarak güncelle
+            CurrentJob.MainApproval = ApprovalStatus.Rejected;
+
+            // 3. Arayüzü güncelle (butonları gizle, red mesajını göster)
+            UpdateApprovalStatus();
+        }
+
+
+        // --- MEVCUT TÜM KOMUTLARINIZ (AddNewEquipment, AddNewPart, DeleteEquipment, vb.) ---
+        // Bu metotların hepsi burada SİZİN KODUNUZDA olduğu gibi kalıyor.
         [RelayCommand]
         async Task AddNewEquipment()
         {
@@ -108,7 +171,6 @@ namespace EquipmentTracker.ViewModels
             }
         }
 
-
         [RelayCommand]
         private async Task AddNewPart(Equipment parentEquipment)
         {
@@ -150,6 +212,7 @@ namespace EquipmentTracker.ViewModels
                 IsBusy = false;
             }
         }
+
 
         [RelayCommand]
         async Task DeleteEquipment(Equipment equipmentToDelete)
@@ -414,6 +477,5 @@ namespace EquipmentTracker.ViewModels
                 IsBusy = false;
             }
         }
-
     }
 }

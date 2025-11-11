@@ -11,6 +11,20 @@
     <ScrollView Orientation="Both" HorizontalScrollBarVisibility="Always" VerticalScrollBarVisibility="Always">
         <VerticalStackLayout HorizontalOptions="Center" Padding="0">
 
+            <Frame Grid.Row="1" BorderColor="White" Padding="10" Margin="0,0,0,10" WidthRequest="500">
+                <VerticalStackLayout Spacing="5">
+                    <Label Text="Dosya Depolama Yolu" FontSize="Caption" FontAttributes="Bold" TextColor="Black"/>
+                    <Label Text="Tüm PDF/DWG dosyaları bu klasörün içindeki 'Attachments' alt klasörüne kaydedilecektir." FontSize="Micro" TextColor="Gray"/>
+                    <Entry Text="{Binding AttachmentPath}" 
+                            FontSize="Small"
+                   Placeholder="Örn: C:\Users\Kullanici\Belgelerim\TrackerDatabase"/>
+                    <Button Text="Bu Yolu Kaydet" 
+                    Command="{Binding SaveAttachmentPathCommand}" 
+                    FontSize="Small" 
+                    HeightRequest="35"/>
+                </VerticalStackLayout>
+            </Frame>
+
             <Frame BorderColor="Black"
                    CornerRadius="5"
                    Padding="10"
@@ -28,19 +42,22 @@
                             TextColor="White"
                             Margin="0,0,0,10"/>
 
+                    
+
                     <SearchBar Grid.Row="1"
                                Placeholder="İş Adı veya İş No ara..."
                                PlaceholderColor="{StaticResource Gray400}"
                                Text="{Binding SearchText}"
                                TextColor="Black"
                                BackgroundColor="Transparent"
-                               Margin="0,0,0,10"/>
+                               Margin="0,10,0,10"
+                               />
 
                     <CollectionView Grid.Row="2"
                                     ItemsSource="{Binding Jobs}"
                                     SelectionMode="None"
-                                    VerticalScrollBarVisibility="Always">
-                        <CollectionView.ItemTemplate>
+                                    VerticalScrollBarVisibility="Always" >
+                        <CollectionView.ItemTemplate >
                             <DataTemplate x:DataType="models:JobModel">
                                 <Frame BorderColor="Black"
                                        CornerRadius="5"
@@ -49,7 +66,7 @@
                                        HasShadow="True"
                                        BackgroundColor="Transparent">
 
-                                    <Grid ColumnDefinitions="*, Auto">
+                                    <Grid ColumnDefinitions="*, Auto" >
                                         <Grid.GestureRecognizers>
                                             <TapGestureRecognizer 
                                                 Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobListViewModel}}, Path=GoToDetailsCommand}"

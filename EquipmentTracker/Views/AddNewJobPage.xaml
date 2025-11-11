@@ -30,6 +30,14 @@
             <Label Text="İş Sahibi:" FontSize="Small" />
             <Entry Text="{Binding JobOwner}" Placeholder="Örn: ASKİ" />
 
+            <Label Text="Ekleyen Kişi:" FontSize="Small" Margin="0,10,0,0"/>
+            <Entry Text="{Binding CreatorName}" Placeholder="Adınız Soyadınız (Zorunlu)" />
+
+            <Label Text="Yetkiniz/Rolünüz:" FontSize="Small" />
+            <Entry Text="{Binding CreatorRole}" Placeholder="Örn: Proje Yöneticisi (Opsiyonel)" />
+
+            <Label Text="İş Açıklaması:" FontSize="Small" />
+            <Editor Text="{Binding JobDescription}" Placeholder="İşle ilgili kısa açıklama... (Opsiyonel)" HeightRequest="100" />
             <Label Text="Tarih:" FontSize="Small" />
             <DatePicker Date="{Binding Date}" Format="dd/MM/yyyy" />
 
@@ -48,5 +56,4 @@
 
         </VerticalStackLayout>
     </ScrollView>
-
 </ContentPage>

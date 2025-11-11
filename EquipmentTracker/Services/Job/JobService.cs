@@ -1,6 +1,7 @@
 ﻿// Dosya: Services/Job/JobService.cs
 using EquipmentTracker.Data;
 using EquipmentTracker.Models;
+using EquipmentTracker.Models.Enums;
 using Microsoft.EntityFrameworkCore;
 using System.Collections.ObjectModel;
 
@@ -79,6 +80,9 @@ namespace EquipmentTracker.Services.Job
                 JobName = "AŞKALE ÇİMENTO PAKET ARITMASI",
                 JobOwner = "STH ÇEVRE",
                 Date = new DateTime(2025, 9, 15),
+                CreatorName = "İlker",
+                CreatorRole = "Role",
+                JobDescription = "Açıklama1",
                 Equipments = new ObservableCollection<Equipment> { /* ... */ }
             };
             job2 = new JobModel
@@ -87,6 +91,9 @@ namespace EquipmentTracker.Services.Job
                 JobName = "TRABZON SU ARITMA TESİSİ",
                 JobOwner = "TİSKİ",
                 Date = new DateTime(2025, 10, 20),
+                CreatorName = "İlker",
+                CreatorRole = "Role",
+                JobDescription = "Açıklama2",
                 Equipments = new ObservableCollection<Equipment> { /* ... */ }
             };
 
@@ -102,6 +109,22 @@ namespace EquipmentTracker.Services.Job
                 _context.Jobs.Remove(job);
                 await _context.SaveChangesAsync();
             }
+        }
+
+        public async Task UpdateJobApprovalAsync(int jobId, ApprovalStatus newStatus)
+        {
+            // 'FindAsync' nesneyi "izlenen" (tracked) olarak getirir
+            var jobToUpdate = await _context.Jobs.FindAsync(jobId);
+
+            if (jobToUpdate != null)
+            {
+                // Sadece 1 alanı güncelle
+                jobToUpdate.MainApproval = newStatus;
+                // Değişiklikleri kaydet
+                await _context.SaveChangesAsync();
+            }
+            // Bu yöntem, ViewModel'deki "izlenmeyen" (untracked)
+            // CurrentJob nesnesine hiç dokunmadığı için çok daha güvenlidir.
         }
     }
 }

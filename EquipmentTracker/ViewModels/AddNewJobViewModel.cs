@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using EquipmentTracker.Models;
 using EquipmentTracker.Services.Job;
+using System.Collections.ObjectModel;
 
 namespace EquipmentTracker.ViewModels
 {
@@ -16,6 +17,10 @@ namespace EquipmentTracker.ViewModels
         [ObservableProperty] string _jobOwner;
         [ObservableProperty] DateTime _date = DateTime.Now; // Varsayılan tarih
         
+        [ObservableProperty] string _creatorName;
+        [ObservableProperty] string _creatorRole;
+        [ObservableProperty] string _jobDescription;
+
         public AddNewJobViewModel(IJobService jobService)
         {
             _jobService = jobService;
@@ -42,26 +47,30 @@ namespace EquipmentTracker.ViewModels
         [RelayCommand]
         async Task SaveJob()
         {
-            if (string.IsNullOrWhiteSpace(JobName) || string.IsNullOrWhiteSpace(JobOwner))
+            if (string.IsNullOrWhiteSpace(JobName) || string.IsNullOrWhiteSpace(JobOwner) || string.IsNullOrWhiteSpace(CreatorName))
             {
-                await Shell.Current.DisplayAlert("Hata", "İş Adı ve İş Sahibi boş olamaz.", "Tamam");
+                await Shell.Current.DisplayAlert("Hata", "İş Adı, İş Sahibi ve Ekleyen Adı boş olamaz.", "Tamam");
                 return;
             }
 
-            // Yeni Job nesnesini oluştur
             var newJob = new JobModel
             {
-                JobNumber = this.JobNumber, // Otomatik gelen
-                JobName = this.JobName,   // Formdan gelen
-                JobOwner = this.JobOwner, // Formdan gelen
-                Date = this.Date,         // Formdan gelen
-                //Equipments = new List<Equipment>() // Başlangıçta boş ekipman listesi
+                JobNumber = this.JobNumber,
+                JobName = this.JobName,
+                JobOwner = this.JobOwner,
+                Date = this.Date,
+
+                // --- YENİ VERİLER ---
+                CreatorName = this.CreatorName,
+                CreatorRole = this.CreatorRole,
+                JobDescription = this.JobDescription,
+                // MainApproval "Pending" olarak varsayılan gelir (Model'in constructor'ından)
+
+                Equipments = new ObservableCollection<Equipment>()
             };
 
             await _jobService.AddJobAsync(newJob);
-
-            // Başarıyla kaydettikten sonra bir önceki sayfaya (JobDetails) dön
-            await Shell.Current.GoToAsync("..");
+            await Shell.Current.GoToAsync("//JobListPage");
         }
 
         // İptal edip geri dönmek için
