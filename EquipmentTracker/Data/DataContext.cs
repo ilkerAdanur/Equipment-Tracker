@@ -12,6 +12,7 @@ namespace EquipmentTracker.Data
         public DbSet<EquipmentPart> EquipmentParts { get; set; }
 
         public DbSet<EquipmentAttachment> EquipmentAttachments { get; set; }
+        public DbSet<EquipmentPartAttachment> EquipmentPartAttachments { get; set; }
         public DataContext(DbContextOptions<DataContext> options) : base(options)
         {
         }
@@ -40,6 +41,12 @@ namespace EquipmentTracker.Data
                 .HasMany(e => e.Attachments)
                 .WithOne(a => a.Equipment)
                 .HasForeignKey(a => a.EquipmentId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<EquipmentPart>()
+                .HasMany(p => p.Attachments)
+                .WithOne(a => a.EquipmentPart)
+                .HasForeignKey(a => a.EquipmentPartId)
                 .OnDelete(DeleteBehavior.Cascade);
         }
     }

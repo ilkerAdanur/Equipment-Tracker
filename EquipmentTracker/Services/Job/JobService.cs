@@ -29,12 +29,13 @@ namespace EquipmentTracker.Services.Job
         public async Task<JobModel> GetJobByIdAsync(int jobId)
         {
             return await _context.Jobs
-                .Include(j => j.Equipments)
-                .ThenInclude(e => e.Parts) // 1. Ekipmanların Parçalarını yükle
-                .Include(j => j.Equipments)
-                .ThenInclude(e => e.Attachments)
-                .AsNoTracking()
-                .FirstOrDefaultAsync(j => j.Id == jobId);
+        .Include(j => j.Equipments) // İş'in Ekipmanlarını yükle
+            .ThenInclude(e => e.Parts) // O Ekipmanların Parçalarını yükle
+                .ThenInclude(p => p.Attachments) // <-- YENİ EKLENDİ: O Parçaların Dosyalarını yükle
+        .Include(j => j.Equipments) // İş'in Ekipmanlarını (tekrar) yükle
+            .ThenInclude(e => e.Attachments) // O Ekipmanların Dosyalarını yükle
+        .AsNoTracking()
+        .FirstOrDefaultAsync(j => j.Id == jobId);
         }
 
         public async Task<string> GetNextJobNumberAsync()

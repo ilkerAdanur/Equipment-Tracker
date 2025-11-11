@@ -2,11 +2,12 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using EquipmentTracker.Models;
-using EquipmentTracker.Services.Job;
-using EquipmentTracker.Services.EquipmentPartService;
-using System.Collections.ObjectModel;
-using EquipmentTracker.Services.EquipmentService;
 using EquipmentTracker.Services.AttachmentServices;
+using EquipmentTracker.Services.EquipmentPartAttachmentServices;
+using EquipmentTracker.Services.EquipmentPartService;
+using EquipmentTracker.Services.EquipmentService;
+using EquipmentTracker.Services.Job;
+using System.Collections.ObjectModel;
 
 namespace EquipmentTracker.ViewModels
 {
@@ -17,6 +18,7 @@ namespace EquipmentTracker.ViewModels
         private readonly IEquipmentService _equipmentService;
         private readonly IEquipmentPartService _partService;
         private readonly IAttachmentService _attachmentService;
+        private readonly IEquipmentPartAttachmentService _equipmentPartAttachmentService;
 
         [ObservableProperty]
         JobModel _currentJob;
@@ -27,12 +29,14 @@ namespace EquipmentTracker.ViewModels
         public JobDetailsViewModel(IJobService jobService,
                                  IEquipmentService equipmentService,
                                  IEquipmentPartService partService,
-                                 IAttachmentService attachmentService)
+                                 IAttachmentService attachmentService,
+                                 IEquipmentPartAttachmentService equipmentPartAttachmentService)
         {
             _jobService = jobService;
             _equipmentService = equipmentService;
             _partService = partService;
             _attachmentService = attachmentService;
+            _equipmentPartAttachmentService = equipmentPartAttachmentService;
             Title = "İş Detayı";
         }
 
@@ -317,6 +321,99 @@ namespace EquipmentTracker.ViewModels
             }
         }
 
+        /// <summary>
+        /// Bir Parçaya yeni dosya ekler
+        /// </summary>
+        [RelayCommand]
+        async Task AddNewPartAttachment(EquipmentPart parentPart)
+        {
+            if (parentPart == null || CurrentJob == null) return;
+
+            // Bu parçanın bağlı olduğu Ekipmanı bul
+            var parentEquipment = CurrentJob.Equipments.FirstOrDefault(e => e.Parts.Contains(parentPart));
+            if (parentEquipment == null)
+            {
+                await Shell.Current.DisplayAlert("Hata", "Üst ekipman bulunamadı.", "Tamam");
+                return;
+            }
+
+            try
+            {
+                var fileResult = await FilePicker.Default.PickAsync(new PickOptions
+                {
+                    PickerTitle = "Parça için dosya seçin",
+                    // İzin verilen dosya türlerini burada tanımlayabilirsiniz
+                });
+
+                if (fileResult == null) return; // Kullanıcı iptal etti
+
+                if (IsBusy) return;
+                IsBusy = true;
+
+                // 2. Servis aracılığıyla dosyayı kopyala ve veritabanına ekle
+                var savedAttachment = await _equipmentPartAttachmentService.AddAttachmentAsync(CurrentJob, parentEquipment, parentPart, fileResult);
+
+                // 3. Arayüzü güncelle
+                if (savedAttachment != null)
+                {
+                    parentPart.Attachments.Add(savedAttachment);
+                }
+            }
+            catch (Exception ex)
+            {
+                await Shell.Current.DisplayAlert("Hata", "Parça dosyası eklenemedi: " + ex.Message, "Tamam");
+            }
+            finally
+            {
+                IsBusy = false;
+            }
+        }
+
+        /// <summary>
+        /// Seçilen parça dosyasını açar
+        /// </summary>
+        [RelayCommand]
+        async Task OpenPartAttachment(EquipmentPartAttachment attachment)
+        {
+            if (attachment == null) return;
+            await _equipmentPartAttachmentService.OpenAttachmentAsync(attachment);
+        }
+
+        /// <summary>
+        /// Seçilen parça dosyasını siler
+        /// </summary>
+        [RelayCommand]
+        async Task DeletePartAttachment(EquipmentPartAttachment attachment)
+        {
+            if (attachment == null) return;
+
+            bool confirmed = await Shell.Current.DisplayAlert("Dosyayı Sil", $"'{attachment.FileName}' dosyasını kalıcı olarak silmek istediğinizden emin misiniz?", "Evet, Sil", "İptal");
+            if (!confirmed) return;
+
+            if (IsBusy) return;
+            IsBusy = true;
+
+            try
+            {
+                // 1. Servis ile sil
+                await _equipmentPartAttachmentService.DeleteAttachmentAsync(attachment);
+
+                // 2. Arayüzden kaldır
+                foreach (var equip in CurrentJob.Equipments)
+                {
+                    var parentPart = equip.Parts.FirstOrDefault(p => p.Attachments.Contains(attachment));
+                    if (parentPart != null)
+                    {
+                        parentPart.Attachments.Remove(attachment);
+                        break;
+                    }
+                }
+            }
+            finally
+            {
+                IsBusy = false;
+            }
+        }
 
     }
 }

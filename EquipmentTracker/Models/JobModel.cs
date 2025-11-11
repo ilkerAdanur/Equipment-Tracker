@@ -10,7 +10,6 @@ namespace EquipmentTracker.Models
         public string JobName { get; set; }
         public DateTime Date { get; set; }
 
-        // List<T> yerine ObservableCollection<T> kullanıyoruz.
         // Bu, listeye yeni bir ekipman eklediğimizde UI'ın anında güncellenmesini sağlar.
         public ObservableCollection<Equipment> Equipments { get; set; } = new();
     }

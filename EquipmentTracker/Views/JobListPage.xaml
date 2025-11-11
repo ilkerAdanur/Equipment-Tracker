@@ -1,4 +1,3 @@
-<?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:vm="clr-namespace:EquipmentTracker.ViewModels"
@@ -7,64 +6,89 @@
              x:DataType="vm:JobListViewModel"
              Title="{Binding Title}"
              BackgroundColor="White">
-    <Grid RowDefinitions="Auto, Auto, *">
 
-        <Button Grid.Row="0" 
-                Text="Yeni İş Ekle (+)" 
-                Command="{Binding GoToAddNewJobCommand}"
-                Margin="10"
-                BackgroundColor="{StaticResource Primary}" TextColor="White"/>
+    <!-- Dikey ve yatay scroll bar -->
+    <ScrollView Orientation="Both" HorizontalScrollBarVisibility="Always" VerticalScrollBarVisibility="Always">
+        <VerticalStackLayout HorizontalOptions="Center" Padding="0">
 
-        <SearchBar Grid.Row="1"
-                   Placeholder="İş Adı veya İş No ara..."
-                   PlaceholderColor="{StaticResource Gray400}"
-                   Text="{Binding SearchText}"
-                   TextColor="White"
-                   BackgroundColor="Transparent" Margin="10,0,10,0"/>
+            <Frame BorderColor="Black"
+                   CornerRadius="5"
+                   Padding="10"
+                   Margin="0,20,0,20"
+                   HasShadow="True"
+                   BackgroundColor="Transparent"
+                   WidthRequest="500">
 
-        <CollectionView Grid.Row="2"
-                        ItemsSource="{Binding Jobs}"
-                        SelectionMode="None">
-            <CollectionView.ItemTemplate>
-                
-                <DataTemplate x:DataType="models:JobModel" >
-                    <Frame BorderColor="Black" CornerRadius="5" Padding="0" Margin="10,5" HasShadow="True" BackgroundColor="Transparent">
-                        <Grid ColumnDefinitions="*, Auto">
-                            
-                            <Grid.GestureRecognizers>
-                                <TapGestureRecognizer 
-                                    Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobListViewModel}}, Path=GoToDetailsCommand}"
-                                    CommandParameter="{Binding .}"/>
-                            </Grid.GestureRecognizers>
+                <Grid RowDefinitions="Auto, Auto, *">
 
-                            <VerticalStackLayout Grid.Column="0" Padding="10" BackgroundColor="White">
-                                <Label Text="{Binding JobName}" FontSize="Medium" FontAttributes="Bold" TextColor="Black"/>
-                                <Label Text="{Binding JobOwner}" FontSize="Small" TextColor="{StaticResource Gray600}"/>
-                            </VerticalStackLayout>
+                    <Button Grid.Row="0"
+                            Text="Yeni İş Ekle (+)"
+                            Command="{Binding GoToAddNewJobCommand}"
+                            BackgroundColor="{StaticResource Primary}"
+                            TextColor="White"
+                            Margin="0,0,0,10"/>
 
-                            <VerticalStackLayout Grid.Column="1" Padding="10" BackgroundColor="White">
-                                <Label Text="{Binding JobNumber, StringFormat='İş No: {0}'}" 
-                                       VerticalOptions="Center" 
-                                       TextColor="Black" 
-                                       HorizontalOptions="End"
-                                       Margin="0,17,65,0"/>
-                            </VerticalStackLayout>
+                    <SearchBar Grid.Row="1"
+                               Placeholder="İş Adı veya İş No ara..."
+                               PlaceholderColor="{StaticResource Gray400}"
+                               Text="{Binding SearchText}"
+                               TextColor="Black"
+                               BackgroundColor="Transparent"
+                               Margin="0,0,0,10"/>
 
-                            <Button Grid.Column="1"
-                                    Text="Sil"
-                                    BackgroundColor="Red"
-                                    TextColor="Black"
-                                    HeightRequest="40"
-                                    WidthRequest="60"
-                                    FontSize="Small"
-                                    VerticalOptions="Center"
-                                    HorizontalOptions="End"
-                                    Margin="0,0,10,0" Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobListViewModel}}, Path=DeleteJobCommand}"
-                                    CommandParameter="{Binding .}"/>
-                        </Grid>
-                    </Frame>
-                </DataTemplate>
-            </CollectionView.ItemTemplate>
-        </CollectionView>
-    </Grid>
+                    <CollectionView Grid.Row="2"
+                                    ItemsSource="{Binding Jobs}"
+                                    SelectionMode="None"
+                                    VerticalScrollBarVisibility="Always">
+                        <CollectionView.ItemTemplate>
+                            <DataTemplate x:DataType="models:JobModel">
+                                <Frame BorderColor="Black"
+                                       CornerRadius="5"
+                                       Padding="0"
+                                       Margin="0,5,0,5"
+                                       HasShadow="True"
+                                       BackgroundColor="Transparent">
+
+                                    <Grid ColumnDefinitions="*, Auto">
+                                        <Grid.GestureRecognizers>
+                                            <TapGestureRecognizer 
+                                                Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobListViewModel}}, Path=GoToDetailsCommand}"
+                                                CommandParameter="{Binding .}"/>
+                                        </Grid.GestureRecognizers>
+
+                                        <VerticalStackLayout Grid.Column="0" Padding="10" BackgroundColor="White">
+                                            <Label Text="{Binding JobName}" FontSize="Medium" FontAttributes="Bold" TextColor="Black"/>
+                                            <Label Text="{Binding JobOwner}" FontSize="Small" TextColor="{StaticResource Gray600}"/>
+                                        </VerticalStackLayout>
+
+                                        <VerticalStackLayout Grid.Column="1" Padding="10" BackgroundColor="White">
+                                            <Label Text="{Binding JobNumber, StringFormat='İş No: {0}'}"
+                                                   VerticalOptions="Center"
+                                                   TextColor="Black"
+                                                   HorizontalOptions="End"
+                                                   Margin="0,17,65,0"/>
+                                        </VerticalStackLayout>
+
+                                        <Button Grid.Column="1"
+                                                Text="Sil"
+                                                BackgroundColor="Red"
+                                                TextColor="Black"
+                                                HeightRequest="40"
+                                                WidthRequest="60"
+                                                FontSize="Small"
+                                                VerticalOptions="Center"
+                                                HorizontalOptions="End"
+                                                Margin="0,0,10,0"
+                                                Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobListViewModel}}, Path=DeleteJobCommand}"
+                                                CommandParameter="{Binding .}"/>
+                                    </Grid>
+                                </Frame>
+                            </DataTemplate>
+                        </CollectionView.ItemTemplate>
+                    </CollectionView>
+
+                </Grid>
+            </Frame>
+        </VerticalStackLayout>
+    </ScrollView>
 </ContentPage>

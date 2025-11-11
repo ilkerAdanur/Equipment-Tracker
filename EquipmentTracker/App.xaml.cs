@@ -16,15 +16,18 @@ namespace EquipmentTracker
             var window = base.CreateWindow(activationState);
 
             // İstediğiniz varsayılan boyutu ayarlayın
-            const int WindowWidth = 1280;
-            const int WindowHeight = 800;
+            const int WindowWidth = 525;
+            const int WindowHeight = 570;
+            // (Bu satırlar pencereyi ortalar - opsiyonel)
 
+            window.MinimumWidth = WindowWidth;
+            window.MinimumHeight = WindowHeight;
+
+            window.X = 400;
+            window.Y = 20;
+            // Başlangıç boyutunu da ayarlayabiliriz
             window.Width = WindowWidth;
             window.Height = WindowHeight;
-
-            // (Bu satırlar pencereyi ortalar - opsiyonel)
-            window.X = -1;
-            window.Y = -1;
 
             return window;
         }
