@@ -7,105 +7,84 @@
              Title="{Binding Title}"
              BackgroundColor="White">
 
-    <!-- Dikey ve yatay scroll bar -->
-    <ScrollView Orientation="Both" HorizontalScrollBarVisibility="Always" VerticalScrollBarVisibility="Always">
-        <VerticalStackLayout HorizontalOptions="Center" Padding="0">
+    <CollectionView ItemsSource="{Binding Jobs}"
+                    SelectionMode="None"
+                    VerticalScrollBarVisibility="Always">
 
-            <Frame Grid.Row="1" BorderColor="White" Padding="10" Margin="0,0,0,10" WidthRequest="500">
-                <VerticalStackLayout Spacing="5">
-                    <Label Text="Dosya Depolama Yolu" FontSize="Caption" FontAttributes="Bold" TextColor="Black"/>
-                    <Label Text="Tüm PDF/DWG dosyaları bu klasörün içindeki 'Attachments' alt klasörüne kaydedilecektir." FontSize="Micro" TextColor="Gray"/>
-                    <Entry Text="{Binding AttachmentPath}" 
-                            FontSize="Small"
-                   Placeholder="Örn: C:\Users\Kullanici\Belgelerim\TrackerDatabase"/>
-                    <Button Text="Bu Yolu Kaydet" 
-                    Command="{Binding SaveAttachmentPathCommand}" 
-                    FontSize="Small" 
-                    HeightRequest="35"/>
-                </VerticalStackLayout>
-            </Frame>
+        <CollectionView.Header>
+            <VerticalStackLayout HorizontalOptions="Center" Padding="0" Spacing="0">
 
-            <Frame BorderColor="Black"
-                   CornerRadius="5"
-                   Padding="10"
-                   Margin="0,20,0,20"
-                   HasShadow="True"
-                   BackgroundColor="Transparent"
-                   WidthRequest="500">
+                <Frame BorderColor="Black"
+                       CornerRadius="5"
+                       Padding="10"
+                       Margin="0,10,0,10" HasShadow="True"
+                       BackgroundColor="Transparent"
+                       WidthRequest="500">
 
-                <Grid RowDefinitions="Auto, Auto, *">
+                    <VerticalStackLayout Spacing="10">
+                        <!--<Button Text="Yeni İş Ekle (+)"
+                                Command="{Binding GoToAddNewJobCommand}"
+                                BackgroundColor="{StaticResource Primary}"
+                                TextColor="White"/>-->
 
-                    <Button Grid.Row="0"
-                            Text="Yeni İş Ekle (+)"
-                            Command="{Binding GoToAddNewJobCommand}"
-                            BackgroundColor="{StaticResource Primary}"
-                            TextColor="White"
-                            Margin="0,0,0,10"/>
+                        <SearchBar Placeholder="İş Adı veya İş No ara..."
+                                   PlaceholderColor="{StaticResource Gray400}"
+                                   Text="{Binding SearchText}"
+                                   TextColor="Black"
+                                   BackgroundColor="Transparent"/>
+                    </VerticalStackLayout>
+                </Frame>
+            </VerticalStackLayout>
+        </CollectionView.Header>
 
-                    
+        <CollectionView.ItemTemplate>
+            <DataTemplate x:DataType="models:JobModel">
+                <Frame BorderColor="Black"
+                       CornerRadius="5"
+                       Padding="0"
+                       Margin="0,5,0,5"
+                       HasShadow="True"
+                       BackgroundColor="Transparent"
+                       WidthRequest="500"
+                       HorizontalOptions="Center">
 
-                    <SearchBar Grid.Row="1"
-                               Placeholder="İş Adı veya İş No ara..."
-                               PlaceholderColor="{StaticResource Gray400}"
-                               Text="{Binding SearchText}"
-                               TextColor="Black"
-                               BackgroundColor="Transparent"
-                               Margin="0,10,0,10"
-                               />
+                    <Grid ColumnDefinitions="*, Auto" >
+                        <Grid.GestureRecognizers>
+                            <TapGestureRecognizer 
+                                Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobListViewModel}}, Path=GoToDetailsCommand}"
+                                CommandParameter="{Binding .}"/>
+                        </Grid.GestureRecognizers>
 
-                    <CollectionView Grid.Row="2"
-                                    ItemsSource="{Binding Jobs}"
-                                    SelectionMode="None"
-                                    VerticalScrollBarVisibility="Always" >
-                        <CollectionView.ItemTemplate >
-                            <DataTemplate x:DataType="models:JobModel">
-                                <Frame BorderColor="Black"
-                                       CornerRadius="5"
-                                       Padding="0"
-                                       Margin="0,5,0,5"
-                                       HasShadow="True"
-                                       BackgroundColor="Transparent">
+                        <VerticalStackLayout Grid.Column="0" Padding="10" BackgroundColor="White">
+                            <Label Text="{Binding JobName}" FontSize="Medium" FontAttributes="Bold" TextColor="Black"/>
+                            <Label Text="{Binding JobOwner}" FontSize="Small" TextColor="{StaticResource Gray600}"/>
+                        </VerticalStackLayout>
 
-                                    <Grid ColumnDefinitions="*, Auto" >
-                                        <Grid.GestureRecognizers>
-                                            <TapGestureRecognizer 
-                                                Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobListViewModel}}, Path=GoToDetailsCommand}"
-                                                CommandParameter="{Binding .}"/>
-                                        </Grid.GestureRecognizers>
+                        <VerticalStackLayout Grid.Column="1" Padding="10" BackgroundColor="White">
+                            <Label Text="{Binding JobNumber, StringFormat='İş No: {0}'}"
+                                   VerticalOptions="Center"
+                                   TextColor="Black"
+                                   HorizontalOptions="End"
+                                   Margin="0,17,65,0"/>
+                        </VerticalStackLayout>
 
-                                        <VerticalStackLayout Grid.Column="0" Padding="10" BackgroundColor="White">
-                                            <Label Text="{Binding JobName}" FontSize="Medium" FontAttributes="Bold" TextColor="Black"/>
-                                            <Label Text="{Binding JobOwner}" FontSize="Small" TextColor="{StaticResource Gray600}"/>
-                                        </VerticalStackLayout>
+                        <Button Grid.Column="1"
+                                Text="Sil"
+                                BackgroundColor="Red"
+                                TextColor="Black"
+                                HeightRequest="40"
+                                WidthRequest="60"
+                                FontSize="Small"
+                                VerticalOptions="Center"
+                                HorizontalOptions="End"
+                                Margin="0,0,10,0"
+                                Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobListViewModel}}, Path=DeleteJobCommand}"
+                                CommandParameter="{Binding .}"/>
+                    </Grid>
+                </Frame>
+            </DataTemplate>
+        </CollectionView.ItemTemplate>
 
-                                        <VerticalStackLayout Grid.Column="1" Padding="10" BackgroundColor="White">
-                                            <Label Text="{Binding JobNumber, StringFormat='İş No: {0}'}"
-                                                   VerticalOptions="Center"
-                                                   TextColor="Black"
-                                                   HorizontalOptions="End"
-                                                   Margin="0,17,65,0"/>
-                                        </VerticalStackLayout>
+    </CollectionView>
 
-                                        <Button Grid.Column="1"
-                                                Text="Sil"
-                                                BackgroundColor="Red"
-                                                TextColor="Black"
-                                                HeightRequest="40"
-                                                WidthRequest="60"
-                                                FontSize="Small"
-                                                VerticalOptions="Center"
-                                                HorizontalOptions="End"
-                                                Margin="0,0,10,0"
-                                                Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobListViewModel}}, Path=DeleteJobCommand}"
-                                                CommandParameter="{Binding .}"/>
-                                    </Grid>
-                                </Frame>
-                            </DataTemplate>
-                        </CollectionView.ItemTemplate>
-                    </CollectionView>
-
-                </Grid>
-            </Frame>
-        </VerticalStackLayout>
-    </ScrollView>
 </ContentPage>

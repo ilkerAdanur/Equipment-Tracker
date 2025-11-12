@@ -1,7 +1,8 @@
-﻿// Dosya: MauiProgram.cs
+﻿// Dosya: Views/MauiProgram.cs
 using CommunityToolkit.Maui;
+using CommunityToolkit.Maui.Storage;
 using EquipmentTracker;
-using EquipmentTracker.Data; // DataContext için bunu ekleyin
+using EquipmentTracker.Data;
 using EquipmentTracker.Services.AttachmentServices;
 using EquipmentTracker.Services.EquipmentPartAttachmentServices;
 using EquipmentTracker.Services.EquipmentPartService;
@@ -11,49 +12,41 @@ using EquipmentTracker.Services.StatisticsService;
 using EquipmentTracker.Services.StatisticsServices;
 using EquipmentTracker.ViewModels;
 using EquipmentTracker.Views;
-using Microsoft.EntityFrameworkCore; // AddDbContext ve UseSqlite için bunu ekleyin
-// ... (diğer using'ler)
+using Microsoft.EntityFrameworkCore;
 
 public static class MauiProgram
 {
+    // YENİ EKLENDİ: Veritabanının hazır olup olmadığını takip etmek için
+    public static bool IsDatabaseInitialized { get; set; } = false;
+
     public static MauiApp CreateMauiApp()
     {
         var builder = MauiApp.CreateBuilder();
         builder
             .UseMauiApp<App>()
-            .UseMauiCommunityToolkit() // Bu zaten olmalı
+            .UseMauiCommunityToolkit()
             .ConfigureFonts(fonts =>
             {
                 // ... fontlar ...
             });
 
-        // --- VERİTABANI YOLUNU AYARLAMA ---
-        // Veritabanı dosyasını cihazın kendi yerel depolama alanına koymak en güvenli yoldur.
-        // Örn: C:\Users\[KullaniciAdi]\AppData\Local\Packages\[...]\LocalState\tracker.db
+        // ... (VERİTABANI YOLU AYARLAMA bölümü aynı kalıyor) ...
         string documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-
-        // 2. Onun içine 'TrackerDatabase' adında bir klasör yolu oluştur
         string appDataDirectory = Path.Combine(documentsPath, "TrackerDatabase");
-
-        // 3. Bu klasörün var olduğundan emin ol (yoksa oluştur)
         if (!Directory.Exists(appDataDirectory))
         {
             Directory.CreateDirectory(appDataDirectory);
         }
-
-        // 4. Veritabanı dosyasının tam yolunu oluştur
         string dbPath = Path.Combine(appDataDirectory, "tracker.db");
-
 
         // --- BAĞIMLILIK KAYITLARI ---
 
         // 1. Veritabanı (DbContext) Kaydı:
-        // Uygulamaya DataContext'i ve SQLite kullanacağını, yolunun da bu olduğunu söylüyoruz.
         builder.Services.AddDbContext<DataContext>(options =>
             options.UseSqlite($"Data Source={dbPath}")
         );
 
-        // 2. Servisler (Mevcut kodunuzdaki gibi)
+        // 2. Servisler
         builder.Services.AddSingleton<IJobService, JobService>();
         builder.Services.AddSingleton<IEquipmentService, EquipmentService>();
         builder.Services.AddSingleton<IEquipmentPartService, EquipmentPartService>();
@@ -61,19 +54,29 @@ public static class MauiProgram
         builder.Services.AddSingleton<IEquipmentPartAttachmentService, EquipmentPartAttachmentService>();
         builder.Services.AddSingleton<IStatisticsService, StatisticsService>();
 
-        // 3. ViewModellar (Mevcut kodunuzdaki gibi)
+        builder.Services.AddSingleton<IFolderPicker>(FolderPicker.Default);
+
+        // 3. ViewModellar
         builder.Services.AddTransient<JobDetailsViewModel>();
         builder.Services.AddTransient<AddNewJobViewModel>();
         builder.Services.AddTransient<JobListViewModel>();
         builder.Services.AddTransient<DashboardViewModel>();
+        builder.Services.AddTransient<SettingsViewModel>();
 
 
-        // 4. View'ler (Mevcut kodunuzdaki gibi)
+        // 4. View'ler
         builder.Services.AddTransient<JobDetailsPage>();
         builder.Services.AddTransient<AddNewJobPage>();
         builder.Services.AddTransient<JobListPage>();
         builder.Services.AddTransient<DashboardPage>();
+        builder.Services.AddTransient<SettingsPage>();
 
+        // --- SİLİNEN BÖLÜM ---
+        // 'var app = builder.Build();' ile başlayan
+        // ve 'jobService.InitializeDatabaseAsync().Wait();' içeren
+        // tüm bloğu buradan SİLİN.
+
+        // Sadece bu satır kalsın:
         return builder.Build();
     }
 }

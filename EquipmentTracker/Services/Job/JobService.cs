@@ -15,9 +15,51 @@ namespace EquipmentTracker.Services.Job
         {
             _context = context;
 
-            _context.Database.EnsureCreated();
 
-            SeedDataIfNeeded();
+        }
+        private async Task SeedDataIfNeededAsync()
+        {
+            // Veritabanında zaten hiç iş var mı? (Asenkron)
+            if (await _context.Jobs.AnyAsync())
+            {
+                return; // Veritabanı dolu, seeding'e gerek yok.
+            }
+
+            // Veritabanı boş, sahte verilerimizi ekleyelim.
+            var job1 = new JobModel
+            {
+                JobNumber = "001",
+                JobName = "AŞKALE ÇİMENTO PAKET ARITMASI",
+                JobOwner = "STH ÇEVRE",
+                Date = new DateTime(2025, 9, 15),
+                CreatorName = "İlker",
+                CreatorRole = "Role",
+                JobDescription = "Açıklama1",
+                Equipments = new ObservableCollection<Equipment> { /* ... */ }
+            };
+            var job2 = new JobModel
+            {
+                JobNumber = "002",
+                JobName = "TRABZON SU ARITMA TESİSİ",
+                JobOwner = "TİSKİ",
+                Date = new DateTime(2025, 10, 20),
+                CreatorName = "İlker",
+                CreatorRole = "Role",
+                JobDescription = "Açıklama2",
+                Equipments = new ObservableCollection<Equipment> { /* ... */ }
+            };
+
+            await _context.Jobs.AddRangeAsync(job1, job2);
+            await _context.SaveChangesAsync(); // (Asenkron)
+        }
+
+        public async Task InitializeDatabaseAsync()
+        {
+            // Veritabanının oluşturulduğundan emin ol (asenkron olarak)
+            await _context.Database.EnsureCreatedAsync();
+
+            // Veri tohumlamasını asenkron olarak yap
+            await SeedDataIfNeededAsync();
         }
 
         public async Task<List<JobModel>> GetAllJobsAsync()
@@ -59,48 +101,6 @@ namespace EquipmentTracker.Services.Job
         }
 
 
-
-        private void SeedDataIfNeeded()
-        {
-            // Veritabanında zaten hiç iş var mı?
-            if (_context.Jobs.Any())
-            {
-                return; // Veritabanı dolu, seeding'e gerek yok.
-            }
-
-            // Veritabanı boş, sahte verilerimizi ekleyelim.
-            var job1 = new JobModel { /* ... AŞKALE verileri ... */ };
-            var job2 = new JobModel { /* ... TRABZON verileri ... */ };
-
-            // (Önceki mesajdaki SeedDataIfNeeded metodunun içini buraya kopyalayın)
-            // Örnek:
-            job1 = new JobModel
-            {
-                JobNumber = "001",
-                JobName = "AŞKALE ÇİMENTO PAKET ARITMASI",
-                JobOwner = "STH ÇEVRE",
-                Date = new DateTime(2025, 9, 15),
-                CreatorName = "İlker",
-                CreatorRole = "Role",
-                JobDescription = "Açıklama1",
-                Equipments = new ObservableCollection<Equipment> { /* ... */ }
-            };
-            job2 = new JobModel
-            {
-                JobNumber = "002",
-                JobName = "TRABZON SU ARITMA TESİSİ",
-                JobOwner = "TİSKİ",
-                Date = new DateTime(2025, 10, 20),
-                CreatorName = "İlker",
-                CreatorRole = "Role",
-                JobDescription = "Açıklama2",
-                Equipments = new ObservableCollection<Equipment> { /* ... */ }
-            };
-
-            _context.Jobs.AddRange(job1, job2);
-            _context.SaveChanges();
-        }
-
         public async Task DeleteJobAsync(int jobId)
         {
             var job = await _context.Jobs.FindAsync(jobId);
@@ -122,6 +122,7 @@ namespace EquipmentTracker.Services.Job
                 jobToUpdate.MainApproval = newStatus;
                 // Değişiklikleri kaydet
                 await _context.SaveChangesAsync();
+                _context.Entry(jobToUpdate).State = EntityState.Detached;
             }
             // Bu yöntem, ViewModel'deki "izlenmeyen" (untracked)
             // CurrentJob nesnesine hiç dokunmadığı için çok daha güvenlidir.

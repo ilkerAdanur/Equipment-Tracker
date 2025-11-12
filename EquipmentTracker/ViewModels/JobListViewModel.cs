@@ -1,4 +1,5 @@
 ﻿// Dosya: ViewModels/JobListViewModel.cs
+//using CommunityToolkit.Maui.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using EquipmentTracker.Models;
@@ -11,6 +12,7 @@ namespace EquipmentTracker.ViewModels
     public partial class JobListViewModel : BaseViewModel
     {
         private readonly IJobService _jobService;
+        //private readonly IFolderPicker _folderPicker;
         private List<JobModel> _allJobsMasterList = new();
 
         [ObservableProperty]
@@ -26,57 +28,81 @@ namespace EquipmentTracker.ViewModels
         {
             _jobService = jobService;
             Title = "Tüm İşler";
+            //_folderPicker = folderPicker;
             Jobs = new ObservableCollection<JobModel>();
             _searchText = string.Empty;
-            LoadAttachmentPathCommand.Execute(null);
+            //LoadAttachmentPathCommand.Execute(null);
         }
 
-        /// <summary>
-        /// Kayıtlı dosya yolunu Preferences'tan okur ve ekrandaki Entry'ye yazar.
-        /// </summary>
-        [RelayCommand]
-        void LoadAttachmentPath()
-        {
-            // 'Belgelerim\TrackerDatabase'i varsayılan yol olarak ayarla
-            string defaultPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TrackerDatabase");
+        //[RelayCommand]
+        //async Task SelectAttachmentPath(CancellationToken cancellationToken)
+        //{
+        //    try
+        //    {
+        //        var result = await _folderPicker.PickAsync(cancellationToken);
+        //        if (result.IsSuccessful)
+        //        {
+        //            // Seçilen klasörün yolunu Entry'ye yaz
+        //            AttachmentPath = result.Folder.Path;
 
-            // "attachment_path" anahtarıyla kayıtlı yolu getir, yoksa varsayılanı kullan
-            AttachmentPath = Preferences.Get("attachment_path", defaultPath);
-        }
+        //            // Yolu otomatik olarak kaydetmek için mevcut komutu tetikle
+        //            await SaveAttachmentPath();
+        //        }
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        await Shell.Current.DisplayAlert("Hata", $"Klasör seçilemedi: {ex.Message}", "Tamam");
+        //    }
+        //}
 
-        /// <summary>
-        /// Ekrana girilen yeni yolu Preferences'a kaydeder.
-        /// </summary>
-        [RelayCommand]
-        async Task SaveAttachmentPath()
-        {
-            if (string.IsNullOrWhiteSpace(AttachmentPath))
-            {
-                await Shell.Current.DisplayAlert("Hata", "Dosya yolu boş olamaz.", "Tamam");
-                return;
-            }
+        ///// <summary>
+        ///// Kayıtlı dosya yolunu Preferences'tan okur ve ekrandaki Entry'ye yazar.
+        ///// </summary>
+        //[RelayCommand]
+        //void LoadAttachmentPath()
+        //{
+        //    // 'Belgelerim\TrackerDatabase'i varsayılan yol olarak ayarla
+        //    string defaultPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TrackerDatabase");
 
-            // Klasörü oluşturmayı dene (izin kontrolü için)
-            try
-            {
-                if (!Directory.Exists(Path.Combine(AttachmentPath, "Attachments")))
-                {
-                    Directory.CreateDirectory(Path.Combine(AttachmentPath, "Attachments"));
-                }
+        //    // "attachment_path" anahtarıyla kayıtlı yolu getir, yoksa varsayılanı kullan
+        //    AttachmentPath = Preferences.Get("attachment_path", defaultPath);
+        //}
 
-                // Yolu kaydet
-                Preferences.Set("attachment_path", AttachmentPath);
-                await Shell.Current.DisplayAlert("Başarılı", "Yeni dosya yolu kaydedildi.", "Tamam");
-            }
-            catch (Exception ex)
-            {
-                // Genellikle 'C:\' gibi izin olmayan bir yere kaydetmeye çalışınca bu hata alınır.
-                await Shell.Current.DisplayAlert("Hata", $"Yol kaydedilemedi. Geçerli bir klasör olduğundan emin olun.\n\nHata: {ex.Message}", "Tamam");
-            }
-        }
+
+        ///// <summary>
+        ///// Ekrana girilen yeni yolu Preferences'a kaydeder.
+        ///// </summary>
+        //[RelayCommand]
+        //async Task SaveAttachmentPath()
+        //{
+        //    if (string.IsNullOrWhiteSpace(AttachmentPath))
+        //    {
+        //        await Shell.Current.DisplayAlert("Hata", "Dosya yolu boş olamaz.", "Tamam");
+        //        return;
+        //    }
+
+        //    // Klasörü oluşturmayı dene (izin kontrolü için)
+        //    try
+        //    {
+        //        if (!Directory.Exists(Path.Combine(AttachmentPath, "Attachments")))
+        //        {
+        //            Directory.CreateDirectory(Path.Combine(AttachmentPath, "Attachments"));
+        //        }
+
+        //        // Yolu kaydet
+        //        Preferences.Set("attachment_path", AttachmentPath);
+        //        await Shell.Current.DisplayAlert("Başarılı", "Yeni dosya yolu kaydedildi.", "Tamam");
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        // Genellikle 'C:\' gibi izin olmayan bir yere kaydetmeye çalışınca bu hata alınır.
+        //        await Shell.Current.DisplayAlert("Hata", $"Yol kaydedilemedi. Geçerli bir klasör olduğundan emin olun.\n\nHata: {ex.Message}", "Tamam");
+        //    }
+        //}
 
 
         // Sayfa yüklendiğinde verileri çeker
+
         [RelayCommand]
         async Task LoadJobsAsync()
         {
@@ -99,6 +125,7 @@ namespace EquipmentTracker.ViewModels
                 IsBusy = false;
             }
         }
+
         partial void OnSearchTextChanged(string value)
         {
             FilterJobs();

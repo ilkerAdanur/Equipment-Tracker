@@ -8,7 +8,7 @@
              x:DataType="vm:JobDetailsViewModel"
              Title="{Binding Title}"
              BackgroundColor="White"
-             Shell.TabBarIsVisible="False">
+             Shell.TabBarIsVisible="True">
     <ContentPage.Resources>
         <converters:IsNullOrEmptyStringConverter x:Key="IsNullOrEmptyStringConverter" />
     </ContentPage.Resources>
@@ -40,7 +40,7 @@
                     </VerticalStackLayout>
                 </Frame>
 
-                <Frame IsVisible="{Binding IsPending}" BorderColor="Orange" Padding="15" Margin="0,10" WidthRequest="500">
+                <!--<Frame IsVisible="{Binding IsPending}" BorderColor="Orange" Padding="15" Margin="0,10" WidthRequest="500">
                     <VerticalStackLayout Spacing="10">
                         <Label Text="Bu iş henüz onay bekliyor." FontSize="Medium" FontAttributes="Bold" TextColor="Orange"/>
                         <Label Text="Ekipmanları ve parçaları yönetmeye başlamak için lütfen bu adımı onaylayın." FontSize="Small" TextColor="Black"/>
@@ -49,14 +49,15 @@
                             <Button Grid.Column="1" Text="İşi Onayla" Command="{Binding ApproveJobCommand}" BackgroundColor="Green" TextColor="White" Margin="5,0,0,0"/>
                         </Grid>
                     </VerticalStackLayout>
-                </Frame>
+                </Frame>-->
 
-                <VerticalStackLayout IsVisible="{Binding IsApproved}" WidthRequest="500">
+                <VerticalStackLayout IsVisible="True" WidthRequest="500">
 
                     <Grid ColumnDefinitions="*, Auto" Padding="5,5,5,0">
                         <Label Grid.Column="0" Text="EKİPMANLAR" FontSize="Small" FontAttributes="Bold" TextColor="{StaticResource Gray600}" VerticalOptions="Center"/>
                         <Button Grid.Column="1" Text="Yeni Ekipman Ekle (+)" Command="{Binding AddNewEquipmentCommand}" FontSize="Caption" WidthRequest="150"   HeightRequest="15"  />
                     </Grid>
+                    
                     <CollectionView ItemsSource="{Binding CurrentJob.Equipments}" >
                         <CollectionView.ItemTemplate >
                             <DataTemplate x:DataType="models:Equipment" >
@@ -76,6 +77,8 @@
                                             </HorizontalStackLayout>
                                         </Grid>
 
+                                        
+                                        
                                         <BoxView HeightRequest="1" Color="{StaticResource Gray200}"/>
 
                                         <Label Text="Ekli Dosyalar:" FontSize="Caption" FontAttributes="Bold" TextColor="Black" Margin="7,10,0,0"/>
@@ -83,7 +86,7 @@
                                             <CollectionView.ItemTemplate>
                                                 <DataTemplate x:DataType="models:EquipmentAttachment">
                                                     <Grid ColumnDefinitions="Auto, *, Auto" ColumnSpacing="5" Padding="0,2">
-                                                        <Image Grid.Column="0" Source="{Binding ThumbnailPath}" WidthRequest="30" HeightRequest="30" Aspect="AspectFit" BackgroundColor="{StaticResource Gray100}">
+                                                        <Image Grid.Column="0" Source="{Binding ThumbnailPath}" WidthRequest="100" HeightRequest="100" Aspect="AspectFit" BackgroundColor="{StaticResource Gray100}">
                                                             <Image.Triggers>
                                                                 <DataTrigger TargetType="Image" Binding="{Binding ThumbnailPath, Converter={StaticResource IsNullOrEmptyStringConverter}}" Value="True">
                                                                     <Setter Property="IsVisible" Value="False" />
@@ -101,6 +104,7 @@
                                                 <Label Text="Bu ekipmana ait dosya yok." TextColor="Gray" FontSize="Caption" FontAttributes="Italic" Margin="5"/>
                                             </CollectionView.EmptyView>
                                         </CollectionView>
+                                        
 
                                         <CollectionView ItemsSource="{Binding Parts}" Margin="10,5,0,0">
                                             <CollectionView.ItemTemplate>
@@ -146,17 +150,26 @@
                                                         </CollectionView>
                                                         <BoxView HeightRequest="1" Color="{StaticResource Gray200}" Margin="0,5,0,0"/>
                                                     </VerticalStackLayout>
+                                            
                                                 </DataTemplate>
                                             </CollectionView.ItemTemplate>
                                         </CollectionView>
+                                        
                                     </VerticalStackLayout>
+
+                                    
+
                                 </Frame>
+                                
                             </DataTemplate>
                         </CollectionView.ItemTemplate>
                     </CollectionView>
+                                        
+                    
+
 
                 </VerticalStackLayout>
-                <Frame IsVisible="{Binding IsRejected}" BorderColor="Red" Padding="15" Margin="0,10">
+                <Frame IsVisible="False" BorderColor="Red" Padding="15" Margin="0,10">
                     <Label Text="Bu iş reddedildi. Akış durduruldu." FontSize="Medium" FontAttributes="Bold" TextColor="Red" HorizontalOptions="Center"/>
                 </Frame>
 

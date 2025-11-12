@@ -12,4 +12,5 @@ public interface IJobService
     Task DeleteJobAsync(int jobId);
     Task<string> GetNextJobNumberAsync();
     Task UpdateJobApprovalAsync(int jobId, ApprovalStatus newStatus);
+    Task InitializeDatabaseAsync();
 }

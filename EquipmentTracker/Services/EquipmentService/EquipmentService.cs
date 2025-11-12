@@ -14,7 +14,6 @@ namespace EquipmentTracker.Services.EquipmentService
             _context = context;
         }
 
-
         public async Task<Equipment> AddEquipmentAsync(JobModel parentJob, Equipment newEquipment)
         {
             newEquipment.JobId = parentJob.Id; // Foreign key'i (ilişkiyi) ayarla
@@ -45,7 +44,6 @@ namespace EquipmentTracker.Services.EquipmentService
 
             return (nextEquipId, nextEquipCode);
         }
-
         public async Task DeleteEquipmentAsync(int equipmentId)
         {
             var equipmentToDelete = await _context.Equipments.FindAsync(equipmentId);

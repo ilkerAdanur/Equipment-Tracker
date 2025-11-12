@@ -1,10 +1,8 @@
 ﻿using EquipmentTracker.Data;
 using EquipmentTracker.Models;
 using Microsoft.EntityFrameworkCore;
-using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace EquipmentTracker.Services.EquipmentPartService
@@ -19,7 +17,7 @@ namespace EquipmentTracker.Services.EquipmentPartService
         }
         public async Task<EquipmentPart> AddNewPartAsync(Equipment parentEquipment, EquipmentPart newPart)
         {
-            newPart.EquipmentId = parentEquipment.Id; // Foreign key'i (ilişkiyi) ayarla
+            newPart.EquipmentId = parentEquipment.Id;
             _context.EquipmentParts.Add(newPart);
             await _context.SaveChangesAsync();
 
@@ -29,14 +27,17 @@ namespace EquipmentTracker.Services.EquipmentPartService
         }
         public async Task<(string nextPartId, string nextPartCode)> GetNextPartIdsAsync(Equipment parentEquipment)
         {
-            // Bu parçanın bağlı olduğu EKİPMANIN koduna ("001.001") ihtiyacımız var
             string equipCode = parentEquipment.EquipmentCode;
 
-            // O ekipmana bağlı en son parçayı bul
-            var lastPart = await _context.EquipmentParts
+            var allPartsForEquipment = await _context.EquipmentParts
                 .Where(p => p.EquipmentId == parentEquipment.Id)
-                .OrderByDescending(p => p.PartId)
-                .FirstOrDefaultAsync();
+                .ToListAsync();
+
+            // Sıralamayı C# içinde yap (string "10"un "2"den büyük olduğunu anlaması için)
+            var lastPart = allPartsForEquipment
+                .Where(p => int.TryParse(p.PartId, out _)) // Sadece sayısal PartId'leri al
+                .OrderByDescending(p => int.Parse(p.PartId)) // Bunları sayısal olarak sırala
+                .FirstOrDefault(); // En yükseğini al
 
             int nextId = 1;
             if (lastPart != null && int.TryParse(lastPart.PartId, out int lastId))
@@ -44,8 +45,9 @@ namespace EquipmentTracker.Services.EquipmentPartService
                 nextId = lastId + 1;
             }
 
-            string nextPartId = nextId.ToString(); // "1", "2", "3"...
-            string nextPartCode = $"{equipCode}.{nextId}"; // "001.001.1", "001.001.2"...
+            // GÜNCELLENDİ: PartId'yi "D3" (001, 002, ...) olarak formatla
+            string nextPartId = nextId.ToString("D3");
+            string nextPartCode = $"{equipCode}.{nextPartId}"; // "001.001.001"
 
             return (nextPartId, nextPartCode);
         }
@@ -59,6 +61,5 @@ namespace EquipmentTracker.Services.EquipmentPartService
                 await _context.SaveChangesAsync();
             }
         }
-
     }
 }

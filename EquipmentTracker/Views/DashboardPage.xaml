@@ -68,9 +68,9 @@
                     </Frame>
                 </Grid>
 
-                <Label Text="İş Durumları" FontSize="Large" FontAttributes="Bold" Margin="5,20,0,10" TextColor="Black"/>
+                <!--<Label Text="İş Durumları" FontSize="Large" FontAttributes="Bold" Margin="5,20,0,10" TextColor="Black"/>-->
 
-                <Grid ColumnDefinitions="*,*,*">
+                <!--<Grid ColumnDefinitions="*,*,*">
                     <Frame Grid.Column="0" Style="{StaticResource StatCard}" BorderColor="Orange">
                         <VerticalStackLayout>
                             <Label Text="{Binding Stats.PendingJobs}" Style="{StaticResource StatValue}" TextColor="Orange"/>
@@ -89,7 +89,7 @@
                             <Label Text="Reddedilmiş" Style="{StaticResource StatTitle}"/>
                         </VerticalStackLayout>
                     </Frame>
-                </Grid>
+                </Grid>-->
 
                 <Label Text="Analiz" FontSize="Large" FontAttributes="Bold" Margin="5,20,0,10" TextColor="Black"/>
 

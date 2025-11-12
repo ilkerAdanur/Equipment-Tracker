@@ -1,11 +1,10 @@
-// Dosya: Views/JobListPage.xaml.cs
 using EquipmentTracker.ViewModels;
 
 namespace EquipmentTracker.Views;
 
-public partial class JobListPage : ContentPage
+public partial class SettingsPage : ContentPage
 {
-    public JobListPage(JobListViewModel viewModel)
+    public SettingsPage(SettingsViewModel viewModel)
     {
         InitializeComponent();
         BindingContext = viewModel;

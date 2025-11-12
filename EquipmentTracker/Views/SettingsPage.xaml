@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:EquipmentTracker.ViewModels"
+             x:Class="EquipmentTracker.Views.SettingsPage"
+             x:DataType="vm:SettingsViewModel"
+             Title="{Binding Title}"
+             BackgroundColor="White">
+
+    <ScrollView>
+        <VerticalStackLayout HorizontalOptions="Center" Padding="10" Spacing="10">
+
+            <Frame BorderColor="White" Padding="10" Margin="0,0,0,10" WidthRequest="500">
+                <VerticalStackLayout Spacing="5">
+                    <Label Text="Dosya Depolama Yolu" FontSize="Caption" FontAttributes="Bold" TextColor="Black"/>
+                    <Label Text="Tüm PDF/DWG dosyaları bu klasörün içindeki 'Attachments' alt klasörüne kaydedilecektir." FontSize="Micro" TextColor="Gray"/>
+
+                    <Grid ColumnDefinitions="*, Auto" ColumnSpacing="5">
+                        <Entry Grid.Column="0"
+                               Text="{Binding AttachmentPath}" 
+                               FontSize="Small"
+                               Placeholder="Örn: C:\Users\Kullanici\Belgelerim\TrackerDatabase"/>
+                        <Button Grid.Column="1"
+                                Text="Gözat..."
+                                Command="{Binding SelectAttachmentPathCommand}"
+                                FontSize="Small"
+                                WidthRequest="80"
+                                HeightRequest="35"/>
+                    </Grid>
+
+                    <Button Text="Bu Yolu Kaydet" 
+                            Command="{Binding SaveAttachmentPathCommand}" 
+                            FontSize="Small" 
+                            HeightRequest="35"/>
+                </VerticalStackLayout>
+            </Frame>
+
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

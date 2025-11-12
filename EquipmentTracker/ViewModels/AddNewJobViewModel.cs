@@ -35,6 +35,15 @@ namespace EquipmentTracker.ViewModels
             IsBusy = true;
             try
             {
+                // --- YENİ KONTROL ---
+                // Veritabanı daha önce hazırlanmadıysa, şimdi hazırla.
+                if (!MauiProgram.IsDatabaseInitialized)
+                {
+                    await _jobService.InitializeDatabaseAsync();
+                    MauiProgram.IsDatabaseInitialized = true; // Hazırlandı olarak işaretle
+                }
+                // --- KONTROL SONU ---
+
                 JobNumber = await _jobService.GetNextJobNumberAsync();
             }
             finally
