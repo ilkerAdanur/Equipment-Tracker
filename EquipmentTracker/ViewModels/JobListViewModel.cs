@@ -55,50 +55,50 @@ namespace EquipmentTracker.ViewModels
         //    }
         //}
 
-        ///// <summary>
-        ///// Kayıtlı dosya yolunu Preferences'tan okur ve ekrandaki Entry'ye yazar.
-        ///// </summary>
-        //[RelayCommand]
-        //void LoadAttachmentPath()
-        //{
-        //    // 'Belgelerim\TrackerDatabase'i varsayılan yol olarak ayarla
-        //    string defaultPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TrackerDatabase");
+        /// <summary>
+        /// Kayıtlı dosya yolunu Preferences'tan okur ve ekrandaki Entry'ye yazar.
+        /// </summary>
+        [RelayCommand]
+        void LoadAttachmentPath()
+        {
+            // 'Belgelerim\TrackerDatabase'i varsayılan yol olarak ayarla
+            string defaultPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TrackerDatabase");
 
-        //    // "attachment_path" anahtarıyla kayıtlı yolu getir, yoksa varsayılanı kullan
-        //    AttachmentPath = Preferences.Get("attachment_path", defaultPath);
-        //}
+            // "attachment_path" anahtarıyla kayıtlı yolu getir, yoksa varsayılanı kullan
+            AttachmentPath = Preferences.Get("attachment_path", defaultPath);
+        }
 
 
-        ///// <summary>
-        ///// Ekrana girilen yeni yolu Preferences'a kaydeder.
-        ///// </summary>
-        //[RelayCommand]
-        //async Task SaveAttachmentPath()
-        //{
-        //    if (string.IsNullOrWhiteSpace(AttachmentPath))
-        //    {
-        //        await Shell.Current.DisplayAlert("Hata", "Dosya yolu boş olamaz.", "Tamam");
-        //        return;
-        //    }
+        /// <summary>
+        /// Ekrana girilen yeni yolu Preferences'a kaydeder.
+        /// </summary>
+        [RelayCommand]
+        async Task SaveAttachmentPath()
+        {
+            if (string.IsNullOrWhiteSpace(AttachmentPath))
+            {
+                await Shell.Current.DisplayAlert("Hata", "Dosya yolu boş olamaz.", "Tamam");
+                return;
+            }
 
-        //    // Klasörü oluşturmayı dene (izin kontrolü için)
-        //    try
-        //    {
-        //        if (!Directory.Exists(Path.Combine(AttachmentPath, "Attachments")))
-        //        {
-        //            Directory.CreateDirectory(Path.Combine(AttachmentPath, "Attachments"));
-        //        }
+            // Klasörü oluşturmayı dene (izin kontrolü için)
+            try
+            {
+                if (!Directory.Exists(Path.Combine(AttachmentPath, "Attachments")))
+                {
+                    Directory.CreateDirectory(Path.Combine(AttachmentPath, "Attachments"));
+                }
 
-        //        // Yolu kaydet
-        //        Preferences.Set("attachment_path", AttachmentPath);
-        //        await Shell.Current.DisplayAlert("Başarılı", "Yeni dosya yolu kaydedildi.", "Tamam");
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        // Genellikle 'C:\' gibi izin olmayan bir yere kaydetmeye çalışınca bu hata alınır.
-        //        await Shell.Current.DisplayAlert("Hata", $"Yol kaydedilemedi. Geçerli bir klasör olduğundan emin olun.\n\nHata: {ex.Message}", "Tamam");
-        //    }
-        //}
+                // Yolu kaydet
+                Preferences.Set("attachment_path", AttachmentPath);
+                await Shell.Current.DisplayAlert("Başarılı", "Yeni dosya yolu kaydedildi.", "Tamam");
+            }
+            catch (Exception ex)
+            {
+                // Genellikle 'C:\' gibi izin olmayan bir yere kaydetmeye çalışınca bu hata alınır.
+                await Shell.Current.DisplayAlert("Hata", $"Yol kaydedilemedi. Geçerli bir klasör olduğundan emin olun.\n\nHata: {ex.Message}", "Tamam");
+            }
+        }
 
 
         // Sayfa yüklendiğinde verileri çeker
