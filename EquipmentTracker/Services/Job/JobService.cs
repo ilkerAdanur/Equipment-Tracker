@@ -22,25 +22,33 @@ namespace EquipmentTracker.Services.Job
 
         public async Task<string> GetGlobalAttachmentPathAsync()
         {
+            // 1. Varsayılan Yerel Yol (Yedek Plan)
+            string localDocuments = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+            string defaultPath = Path.Combine(localDocuments, "TrackerDatabase", "Attachments");
             try
             {
+                // 2. Veritabanından ayarı çek
                 var setting = await _context.AppSettings
                     .AsNoTracking()
                     .FirstOrDefaultAsync(x => x.Key == "AttachmentPath");
 
-                // Eğer veritabanında yoksa, varsayılan yerel yolu döndür
-                if (setting == null || string.IsNullOrWhiteSpace(setting.Value))
+                // 3. Eğer veritabanında geçerli bir yol varsa onu kullan
+                if (setting != null && !string.IsNullOrWhiteSpace(setting.Value))
                 {
-                    return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TrackerDatabase");
+                    return Path.Combine(setting.Value, "Attachments");
                 }
-
-                return setting.Value;
             }
-            catch
+            catch (Exception ex)
             {
-                // Hata olursa (db yoksa vb.) varsayılanı dön
-                return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TrackerDatabase");
+                // 4. Hata Yönetimi (Catch Dolu)
+                Debug.WriteLine($"[GetGlobalAttachmentPathAsync] Kritik Hata: {ex.Message}");
+                if (ex.InnerException != null)
+                {
+                    Debug.WriteLine($"[GetGlobalAttachmentPathAsync] Detay: {ex.InnerException.Message}");
+                }
             }
+            // 5. Ayar bulunamadıysa veya Catch'e düştüyse varsayılanı döndür
+            return defaultPath;
         }
 
         public async Task SetGlobalAttachmentPathAsync(string path)
@@ -71,17 +79,18 @@ namespace EquipmentTracker.Services.Job
         /// <summary>
         /// Geçersiz klasör adı karakterlerini temizler.
         /// </summary>
-        private static string SanitizeFolderName(string folderName)
+        private string SanitizeFolderName(string name)
         {
-            if (string.IsNullOrEmpty(folderName)) return string.Empty;
-            string sanitizedName = Regex.Replace(folderName, @"[\\/:*?""<>| ]", "_");
-            sanitizedName = Regex.Replace(sanitizedName, @"_+", "_");
-            return sanitizedName.Trim('_');
+            if (string.IsNullOrEmpty(name)) return "Unknown";
+            foreach (char c in Path.GetInvalidFileNameChars())
+            {
+                name = name.Replace(c, '_');
+            }
+            return name.Trim();
         }
 
         private async Task SeedDataIfNeededAsync()
         {
-            // Eğer Job tablosunda veri varsa çık, yoksa ekle.
             if (await _context.Jobs.AnyAsync()) return;
 
             var job1 = new JobModel
@@ -162,14 +171,12 @@ namespace EquipmentTracker.Services.Job
 
         public async Task AddJobAsync(JobModel newJob)
         {
-            // Serializable izolasyon seviyesi, biz işlem yaparken araya başka kayıt girmesini engeller.
             using var transaction = await _context.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable);
 
             try
             {
-                // 1. En güncel numarayı ŞU AN hesapla (Kilitli blok içinde)
+                // --- A. İş Numarası Verme Mantığı (AYNI KALIYOR) ---
                 var allJobs = await _context.Jobs.Select(j => j.JobNumber).ToListAsync();
-
                 int maxNumber = 0;
                 if (allJobs.Any())
                 {
@@ -181,22 +188,29 @@ namespace EquipmentTracker.Services.Job
                         }
                     }
                 }
-
-                // Yeni numarayı ata (UI'dan gelen eski numarayı ezer)
                 newJob.JobNumber = (maxNumber + 1).ToString();
 
-                // 2. Kaydet
+                // --- B. Veritabanına Kayıt (AYNI KALIYOR) ---
                 _context.Jobs.Add(newJob);
                 await _context.SaveChangesAsync();
 
-                // 3. Klasör Oluşturma (İsim değişmiş olabileceği için yeni numarayla yapıyoruz)
+                // --- C. KLASÖR OLUŞTURMA (DÜZELTİLEN KISIM) ---
                 try
                 {
-                    string baseAttachmentPath = await GetGlobalAttachmentPathAsync();
+                    // 1. Ortak yolu çek (Örn: \\192.168.1.66\TrackerDatabase)
+                    string dbPath = await GetGlobalAttachmentPathAsync();
+
+                    // 2. Alt klasör "Attachments" ekle
+                    string baseAttachmentPath = Path.Combine(dbPath, "Attachments");
+
+                    // 3. İş Klasörü Adını Oluştur (Örn: 101_IsAdi)
                     string safeJobName = SanitizeFolderName(newJob.JobName);
                     string jobFolder = $"{newJob.JobNumber}_{safeJobName}";
+
+                    // 4. Tam Hedef Yolu
                     string targetDirectory = Path.Combine(baseAttachmentPath, jobFolder);
 
+                    // 5. Klasörü Oluştur (Erişim izni varsa sunucuda oluşur)
                     if (!Directory.Exists(targetDirectory))
                     {
                         Directory.CreateDirectory(targetDirectory);
@@ -204,10 +218,11 @@ namespace EquipmentTracker.Services.Job
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine($"Job klasörü oluşturulamadı: {ex.Message}");
+                    // Klasör oluşturulamazsa (erişim hatası vb.) iş kaydını iptal etme, 
+                    // sadece logla. Kullanıcı daha sonra dosya eklerken klasör tekrar oluşturulur.
+                    System.Diagnostics.Debug.WriteLine($"Job klasörü oluşturulamadı: {ex.Message}");
                 }
 
-                // 4. İşlemi Onayla
                 await transaction.CommitAsync();
             }
             catch
@@ -216,7 +231,6 @@ namespace EquipmentTracker.Services.Job
                 throw;
             }
         }
-
 
         public async Task DeleteJobAsync(int jobId)
         {

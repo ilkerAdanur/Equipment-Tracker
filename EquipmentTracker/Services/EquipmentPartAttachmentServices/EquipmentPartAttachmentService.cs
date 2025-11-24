@@ -44,7 +44,6 @@ namespace EquipmentTracker.Services.EquipmentPartAttachmentServices
 
         private async Task GenerateAndSaveThumbnailInBackground(EquipmentPartAttachment attachment, string sourceDwgPath, string targetThumbName)
         {
-            // UI'da barın görünmesi için başlangıç değerleri
             attachment.IsProcessing = true;
             attachment.ProcessingProgress = 0.1;
 
@@ -53,23 +52,21 @@ namespace EquipmentTracker.Services.EquipmentPartAttachmentServices
                 var dbContext = scope.ServiceProvider.GetRequiredService<DataContext>();
                 try
                 {
-                    string imagesFolder = GetImagesFolderPath();
+                    // --- DÜZELTME BURADA ---
+                    // Küçük resim, sunucudaki DWG dosyasının yanına kaydedilsin.
+                    string imagesFolder = Path.GetDirectoryName(sourceDwgPath);
+
                     string targetThumbPath = Path.Combine(imagesFolder, targetThumbName);
 
-                    // İlerlemeyi simüle et
                     var progressSimulator = Task.Run(async () =>
                     {
                         while (attachment.ProcessingProgress < 0.8 && attachment.IsProcessing)
                         {
                             await Task.Delay(100);
-                            MainThread.BeginInvokeOnMainThread(() =>
-                            {
-                                attachment.ProcessingProgress += 0.05;
-                            });
+                            MainThread.BeginInvokeOnMainThread(() => { attachment.ProcessingProgress += 0.05; });
                         }
                     });
 
-                    // ASIL İŞLEM (Aspose ile Çevirme)
                     await Task.Run(() =>
                     {
                         using (Aspose.CAD.Image cadImage = Aspose.CAD.Image.Load(sourceDwgPath))
@@ -87,9 +84,6 @@ namespace EquipmentTracker.Services.EquipmentPartAttachmentServices
                         }
                     });
 
-                    // --- KRİTİK GÜNCELLEME KISMI ---
-
-                    // 1. Veritabanını güncelle (Arka planda)
                     var dbAttachment = await dbContext.EquipmentPartAttachments.FindAsync(attachment.Id);
                     if (dbAttachment != null)
                     {
@@ -97,30 +91,23 @@ namespace EquipmentTracker.Services.EquipmentPartAttachmentServices
                         await dbContext.SaveChangesAsync();
                     }
 
-                    // 2. UI GÜNCELLEME (Sıralı ve Gecikmeli)
-                    MainThread.BeginInvokeOnMainThread(async () =>
+                    MainThread.BeginInvokeOnMainThread(() =>
                     {
-                        // Barı doldur
                         attachment.ProcessingProgress = 1.0;
-
-                        // Resim yolunu ata (Hala IsProcessing=true olduğu için bar görünür, resim arkada yüklenir)
                         attachment.ThumbnailPath = targetThumbPath;
-
-                        // UI'ın resmi tanıması için minik bir mola ver (250ms)
-                        await Task.Delay(250);
-
-                        // Şimdi barı gizle, resmi göster
-                        attachment.IsProcessing = false;
                     });
+
+                    await Task.Delay(500);
+
+                    MainThread.BeginInvokeOnMainThread(() => attachment.IsProcessing = false);
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine($"Part Thumbnail Hatası: {ex.Message}");
+                    System.Diagnostics.Debug.WriteLine($"Part Thumbnail Hatası: {ex.Message}");
                     MainThread.BeginInvokeOnMainThread(() => attachment.IsProcessing = false);
                 }
             }
         }
-
 
         public async Task<EquipmentPartAttachment> AddAttachmentAsync(JobModel parentJob, Equipment parentEquipment, EquipmentPart parentPart, FileResult fileToCopy)
         {

@@ -60,10 +60,14 @@ namespace EquipmentTracker.Services.AttachmentServices
 
                 try
                 {
-                    string imagesFolder = GetImagesFolderPath();
+                    // --- DÜZELTME BURADA ---
+                    // Eski kod: string imagesFolder = GetImagesFolderPath();
+                    // Yeni kod: Kaynak dosya (DWG) neredeysese, resim de oraya (Sunucuya) gitsin.
+                    string imagesFolder = Path.GetDirectoryName(sourceDwgPath);
+
                     string targetThumbPath = Path.Combine(imagesFolder, targetThumbName);
 
-                    // 2. İlerleme Simülasyonu (Kullanıcı dondu sanmasın diye)
+                    // 2. İlerleme Simülasyonu
                     var progressSimulator = Task.Run(async () =>
                     {
                         while (attachment.ProcessingProgress < 0.8 && attachment.IsProcessing)
@@ -76,7 +80,7 @@ namespace EquipmentTracker.Services.AttachmentServices
                         }
                     });
 
-                    // 3. ASIL AĞIR İŞLEM (Resim Oluşturma)
+                    // 3. ASIL İŞLEM (Resim Oluşturma - Sunucuya Yazar)
                     await Task.Run(() =>
                     {
                         using (Aspose.CAD.Image cadImage = Aspose.CAD.Image.Load(sourceDwgPath))
@@ -89,21 +93,14 @@ namespace EquipmentTracker.Services.AttachmentServices
                                 BackgroundColor = Aspose.CAD.Color.White,
                                 DrawType = Aspose.CAD.FileFormats.Cad.CadDrawTypeMode.UseObjectColor
                             };
-                            var options = new PngOptions
-                            {
-                                VectorRasterizationOptions = rasterizationOptions
-                            };
+                            var options = new PngOptions { VectorRasterizationOptions = rasterizationOptions };
+
+                            // Sunucuya kaydeder
                             cadImage.Save(targetThumbPath, options);
                         }
                     });
 
-                    // 4. Bitiş Animasyonu (%100 yap)
-                    MainThread.BeginInvokeOnMainThread(() => attachment.ProcessingProgress = 1.0);
-
-                    // Dosyanın diske tam yazılması ve UI'ın nefes alması için kısa bekleme
-                    await Task.Delay(250);
-
-                    // 5. Veritabanı Güncelleme
+                    // 4. Veritabanı Kaydı (Yol sunucu yolu olarak güncellenir)
                     var dbAttachment = await dbContext.EquipmentAttachments.FindAsync(attachment.Id);
                     if (dbAttachment != null)
                     {
@@ -111,17 +108,23 @@ namespace EquipmentTracker.Services.AttachmentServices
                         await dbContext.SaveChangesAsync();
                     }
 
-                    // 6. UI Güncelleme (Resmi Göster)
-                    // Burada resmi atayıp işlem bayrağını indiriyoruz.
+                    // 5. UI Güncelleme
                     MainThread.BeginInvokeOnMainThread(() =>
                     {
+                        attachment.ProcessingProgress = 1.0;
                         attachment.ThumbnailPath = targetThumbPath;
+                    });
+
+                    await Task.Delay(500);
+
+                    MainThread.BeginInvokeOnMainThread(() =>
+                    {
                         attachment.IsProcessing = false;
                     });
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine($"Thumbnail hatası: {ex.Message}");
+                    System.Diagnostics.Debug.WriteLine($"Thumbnail hatası: {ex.Message}");
                     MainThread.BeginInvokeOnMainThread(() =>
                     {
                         attachment.IsProcessing = false;
@@ -129,7 +132,6 @@ namespace EquipmentTracker.Services.AttachmentServices
                 }
             }
         }
-
         public async Task<EquipmentAttachment> AddAttachmentAsync(JobModel parentJob, Equipment parentEquipment, FileResult fileToCopy)
         {
             // 1. ADIM: Ortak Yolu (Veritabanından) Belirle
