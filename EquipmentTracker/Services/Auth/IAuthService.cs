@@ -8,5 +8,6 @@ namespace EquipmentTracker.Services.Auth
         Task LogoutAsync(int userId); 
         Task<List<User>> GetActiveUsersAsync(); 
         Task DisconnectUserAsync(int userId);
+        Task<bool> IsUserActiveAsync(int userId);
     }
 }

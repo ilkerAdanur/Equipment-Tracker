@@ -45,11 +45,14 @@ namespace EquipmentTracker.ViewModels
         [RelayCommand]
         async Task SaveJob()
         {
-            if (string.IsNullOrWhiteSpace(JobName) || string.IsNullOrWhiteSpace(JobOwner) )
+            if (string.IsNullOrWhiteSpace(JobName) || string.IsNullOrWhiteSpace(JobOwner))
             {
-                await Shell.Current.DisplayAlert("Hata", "İş Adı, İş Sahibi ve Ekleyen Adı boş olamaz.", "Tamam");
+                await Application.Current.MainPage.DisplayAlert("Hata", "İş Adı ve İş Sahibi boş olamaz.", "Tamam");
                 return;
             }
+
+            // Güvenlik kontrolü (Opsiyonel)
+            // if (!await CheckSessionAsync()) return;
 
             var newJob = new JobModel
             {
@@ -57,16 +60,19 @@ namespace EquipmentTracker.ViewModels
                 JobName = this.JobName,
                 JobOwner = this.JobOwner,
                 Date = this.Date,
-
-                // --- YENİ VERİLER ---
                 JobDescription = this.JobDescription,
-                // MainApproval "Pending" olarak varsayılan gelir (Model'in constructor'ından)
-
                 Equipments = new ObservableCollection<Equipment>()
             };
 
-            await _jobService.AddJobAsync(newJob);
-            await Shell.Current.GoToAsync("//JobListPage");
+            try
+            {
+                await _jobService.AddJobAsync(newJob);
+                await Shell.Current.GoToAsync("//JobListPage");
+            }
+            catch (Exception ex)
+            {
+                await Application.Current.MainPage.DisplayAlert("Hata", $"Kaydedilemedi: {ex.Message}", "Tamam");
+            }
         }
 
         // İptal edip geri dönmek için

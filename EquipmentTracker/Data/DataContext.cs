@@ -13,6 +13,7 @@ namespace EquipmentTracker.Data
 
         // YENİ: Kullanıcılar tablosu
         public DbSet<User> Users { get; set; }
+        public DbSet<AppSetting> AppSettings { get; set; }
 
         public DataContext(DbContextOptions<DataContext> options) : base(options)
         {
@@ -61,5 +62,30 @@ namespace EquipmentTracker.Data
             modelBuilder.Entity<EquipmentPartAttachment>().Ignore(e => e.IsProcessing);
             modelBuilder.Entity<EquipmentPartAttachment>().Ignore(e => e.ProcessingProgress);
         }
+
+        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        {
+            // Tercihlerden ayarları oku
+            string serverIp = Preferences.Get("ServerIP", "192.168.1.20");
+            string dbUser = Preferences.Get("DbUser", "tracker_user");
+            string dbPass = Preferences.Get("DbPassword", "123456");
+
+            // GÜVENLİ BAĞLANTI DİZESİ (Timeout Eklendi)
+            var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder
+            {
+                DataSource = serverIp,
+                InitialCatalog = "TrackerDB",
+                UserID = dbUser,
+                Password = dbPass,
+                TrustServerCertificate = true,
+                ConnectTimeout = 5 // <-- KRİTİK: 5 saniye içinde bağlanamazsa hata fırlat
+            };
+
+            optionsBuilder.UseSqlServer(builder.ConnectionString);
+        }
+
+
+
+
     }
 }

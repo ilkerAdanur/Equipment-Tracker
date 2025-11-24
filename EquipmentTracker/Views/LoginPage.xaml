@@ -23,12 +23,12 @@
 
                     <VerticalStackLayout>
                         <Label Text="Kullanıcı Adı" TextColor="Gray" FontSize="Small"/>
-                        <Entry Text="{Binding Username}" Placeholder="admin" TextColor="Black"/>
+                        <Entry Text="{Binding Username}" Placeholder="Ornek" TextColor="Black"/>
                     </VerticalStackLayout>
 
                     <VerticalStackLayout>
                         <Label Text="Şifre" TextColor="Gray" FontSize="Small"/>
-                        <Entry Text="{Binding Password}" IsPassword="True" Placeholder="123" TextColor="Black"/>
+                        <Entry Text="{Binding Password}" IsPassword="True" Placeholder="Şifrenizi giriniz" TextColor="Black"/>
                     </VerticalStackLayout>
 
                     <Button Text="GİRİŞ YAP" 
@@ -45,8 +45,8 @@
 
             <Button Text="Veritabanı Ayarları" 
                     Command="{Binding GoToSettingsCommand}" 
-                    BackgroundColor="Transparent" 
-                    TextColor="Gray" 
+                    BackgroundColor="White" 
+                    TextColor="Red" 
                     FontSize="Small"
                     />
 

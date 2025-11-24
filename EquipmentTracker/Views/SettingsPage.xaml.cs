@@ -9,4 +9,16 @@ public partial class SettingsPage : ContentPage
         InitializeComponent();
         BindingContext = viewModel;
     }
+
+    // YENÝ: Sayfa göründüðünde çalýþýr
+    protected override void OnAppearing()
+    {
+        base.OnAppearing();
+
+        if (BindingContext is SettingsViewModel vm)
+        {
+            // Giriþ durumunu kontrol et ve butonu güncelle
+            vm.RefreshUserStatus();
+        }
+    }
 }

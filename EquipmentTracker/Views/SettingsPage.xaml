@@ -69,64 +69,60 @@
                             HorizontalOptions="Center"
                             HeightRequest="45"/>
 
-                    <Label Text="Not: Bağlantı sonrası yeniden başlatın" 
+                    <!--<Label Text="Not: Bağlantı sonrası yeniden başlatın" 
                            IsVisible="{Binding IsConnected}"
                            TextColor="Gray" 
                            FontSize="Micro" 
-                           HorizontalOptions="Center"/>
+                           HorizontalOptions="Center"/>-->
 
                 </VerticalStackLayout>
             </Frame>
 
-            <Frame BorderColor="Gray" 
-                   Padding="15" 
-                   WidthRequest="500" 
-                   IsVisible="{Binding IsAdminUser}">
+            <Frame BorderColor="Gray" Padding="15" WidthRequest="500" IsVisible="{Binding IsAdminUser}">
 
                 <VerticalStackLayout Spacing="10">
-                    <Label Text="Dosya Depolama Ayarları" FontSize="Medium" FontAttributes="Bold" TextColor="Black"/>
+                    <Label Text="Ortak Dosya Konumu (Sunucu)" FontSize="Medium" FontAttributes="Bold" TextColor="Black"/>
 
                     <VerticalStackLayout>
-                        <Label Text="TrackerDatabase Konumu:" TextColor="Gray" FontSize="Micro"/>
+                        <Label Text="Dosya Yolu:" TextColor="Gray" FontSize="Micro"/>
                         <Grid ColumnDefinitions="*, Auto" ColumnSpacing="5">
+
                             <Entry Grid.Column="0" 
-                                   Text="{Binding AttachmentPath}" 
-                                   Placeholder="Varsayılan konum..." 
-                                   TextColor="Black"
-                                   BackgroundColor="#F5F5F5"/>
+                           Text="{Binding AttachmentPath}" 
+                           IsEnabled="True" 
+                           Placeholder="Henüz ayarlanmadı..." 
+                           TextColor="Black"
+                           BackgroundColor="#F5F5F5"/>
 
                             <Button Grid.Column="1" 
-                                    Text="📂" 
-                                    Command="{Binding SelectAttachmentPathCommand}" 
-                                    BackgroundColor="Gray" 
-                                    TextColor="White"
-                                    WidthRequest="50"
-                                    Padding="0"/>
+                            Text="📂" 
+                            IsEnabled="True"
+                            Command="{Binding SelectAttachmentPathCommand}" 
+                            BackgroundColor="Gray" 
+                            TextColor="White"
+                            WidthRequest="50"
+                            Padding="0"/>
                         </Grid>
                     </VerticalStackLayout>
 
-                    <Button Text="KONUMU KAYDET" 
-                            Command="{Binding SaveAttachmentPathCommand}" 
-                            BackgroundColor="#2196F3" 
-                            FontAttributes="Bold" 
-                            HeightRequest="45"/>
+                    <Button Text="KONUMU KAYDET (TÜMÜ İÇİN)" 
+                    Command="{Binding SaveAttachmentPathCommand}" 
+                    BackgroundColor="#2196F3" 
+                    FontAttributes="Bold" 
+                    HeightRequest="45"/>
 
-                    <Label Text="Not: Seçilen klasörün içine 'TrackerDatabase' klasörü oluşturulacaktır." 
-                           TextColor="Gray" 
-                           FontSize="Micro" 
-                           HorizontalOptions="Center"
-                           HorizontalTextAlignment="Center"/>
+                    <Label Text="* Bu ayar değiştirildiğinde tüm kullanıcılarda güncellenir." 
+                   TextColor="Red" FontSize="Micro"/>
                 </VerticalStackLayout>
             </Frame>
-
             <Button Text="OTURUMU KAPAT" 
         Command="{Binding LogoutCommand}" 
+        IsVisible="{Binding IsUserLoggedIn}"
         BackgroundColor="Red"
         TextColor="White"
         Margin="0,0,0,200"
         HeightRequest="45"
-        IsVisible="{Binding IsAdminUser}"
-                    WidthRequest="350"
+        WidthRequest="350"
             />
         </VerticalStackLayout>
     </ScrollView>

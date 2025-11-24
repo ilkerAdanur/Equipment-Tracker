@@ -20,6 +20,44 @@ namespace EquipmentTracker.Services.Job
 
         }
 
+        public async Task<string> GetGlobalAttachmentPathAsync()
+        {
+            try
+            {
+                var setting = await _context.AppSettings
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(x => x.Key == "AttachmentPath");
+
+                // Eğer veritabanında yoksa, varsayılan yerel yolu döndür
+                if (setting == null || string.IsNullOrWhiteSpace(setting.Value))
+                {
+                    return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TrackerDatabase");
+                }
+
+                return setting.Value;
+            }
+            catch
+            {
+                // Hata olursa (db yoksa vb.) varsayılanı dön
+                return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TrackerDatabase");
+            }
+        }
+
+        public async Task SetGlobalAttachmentPathAsync(string path)
+        {
+            var setting = await _context.AppSettings.FirstOrDefaultAsync(x => x.Key == "AttachmentPath");
+            if (setting == null)
+            {
+                setting = new AppSetting { Key = "AttachmentPath", Value = path };
+                _context.AppSettings.Add(setting);
+            }
+            else
+            {
+                setting.Value = path;
+            }
+            await _context.SaveChangesAsync();
+        }
+
         /// <summary>
         /// Ayarlardan mevcut yolu okur
         /// </summary>
@@ -154,7 +192,7 @@ namespace EquipmentTracker.Services.Job
                 // 3. Klasör Oluşturma (İsim değişmiş olabileceği için yeni numarayla yapıyoruz)
                 try
                 {
-                    string baseAttachmentPath = GetCurrentAttachmentPath();
+                    string baseAttachmentPath = await GetGlobalAttachmentPathAsync();
                     string safeJobName = SanitizeFolderName(newJob.JobName);
                     string jobFolder = $"{newJob.JobNumber}_{safeJobName}";
                     string targetDirectory = Path.Combine(baseAttachmentPath, jobFolder);

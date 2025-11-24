@@ -3,8 +3,10 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using EquipmentTracker.Services.Auth;
-using EquipmentTracker.Views;
+using EquipmentTracker.Services.Job;
 using EquipmentTracker.ViewModels;
+using EquipmentTracker.Views;
+using Microsoft.Data.SqlClient;
 using System;
 using System.IO;
 using System.Threading.Tasks;
@@ -15,6 +17,10 @@ namespace EquipmentTracker.ViewModels
     public partial class SettingsViewModel : BaseViewModel
     {
         private readonly IFolderPicker _folderPicker;
+        private readonly IServiceProvider _serviceProvider;
+
+        [ObservableProperty]
+        bool _isAdmin;
 
         [ObservableProperty]
         string _attachmentPath;
@@ -39,13 +45,29 @@ namespace EquipmentTracker.ViewModels
 
         [ObservableProperty]
         Color _statusColor;
+        [ObservableProperty]
+        bool _isUserLoggedIn;
+
         public bool IsAdminUser => App.CurrentUser?.IsAdmin ?? false;
 
-        public SettingsViewModel(IFolderPicker folderPicker)
+        public SettingsViewModel(IFolderPicker folderPicker, IServiceProvider serviceProvider)
         {
             _folderPicker = folderPicker;
+            _serviceProvider = serviceProvider;
             Title = "Ayarlar";
+
+            // Kullanıcı admin mi kontrol et
+            IsAdmin = App.CurrentUser?.IsAdmin ?? false;
+
             LoadSettings();
+        }
+
+        public void RefreshUserStatus()
+        {
+            IsUserLoggedIn = App.CurrentUser != null;
+
+            // Eğer kullanıcı yöneticiyse, Admin ayarlarını da aç/kapa
+            IsAdmin = App.CurrentUser?.IsAdmin ?? false;
         }
 
         /// <summary>
@@ -57,27 +79,49 @@ namespace EquipmentTracker.ViewModels
             AttachmentPath = Preferences.Get("attachment_path", defaultPath);
         }
 
-        private void LoadSettings()
+        private async void LoadSettings() // void -> async void yaptık
         {
-            LoadAttachmentPath();
-
-            // Anahtar kontrolü: ServerIP varsa bağlı kabul et
+            // IP Ayarlarını Yükle (Bunlar yerel kalmalı ki sunucuyu bulabilsin)
             if (Preferences.ContainsKey("ServerIP"))
             {
                 ServerIp = Preferences.Get("ServerIP", "");
                 DbUser = Preferences.Get("DbUser", "tracker_user");
                 DbPassword = Preferences.Get("DbPassword", "123456");
-
                 SetConnectedState(true);
+
+                // BAĞLANDIYSA: Dosya yolunu veritabanından çek
+                await LoadGlobalAttachmentPath();
             }
             else
             {
-                // Varsayılan değerleri doldur ama bağlı yapma
-                ServerIp = "192.168.1.20"; // Örnek IP
+                // Varsayılanlar
+                ServerIp = "192.168.1.20";
                 DbUser = "tracker_user";
                 DbPassword = "123";
-
                 SetConnectedState(false);
+            }
+        }
+        private async Task LoadGlobalAttachmentPath()
+        {
+            try
+            {
+                // ServiceProvider üzerinden servise erişiyoruz (Constructor'da eklemeniz gerekebilir veya Handler üzerinden)
+                // Basitlik için Handler kullanıyoruz:
+                var jobService = Application.Current.Handler.MauiContext.Services.GetService<IJobService>();
+                var globalPath = await jobService.GetGlobalAttachmentPathAsync();
+
+                if (!string.IsNullOrEmpty(globalPath))
+                {
+                    AttachmentPath = globalPath;
+                }
+                else
+                {
+                    AttachmentPath = "Henüz ayarlanmamış (Admin bekleniyor)";
+                }
+            }
+            catch
+            {
+                AttachmentPath = "Veritabanına erişilemedi.";
             }
         }
         private void SetConnectedState(bool connected)
@@ -123,31 +167,94 @@ namespace EquipmentTracker.ViewModels
         }
 
 
+        private async Task ShowAlertAsync(string title, string message)
+        {
+            // UI işlemlerini garanti altına almak için MainThread kullanıyoruz
+            if (Application.Current?.MainPage != null)
+            {
+                await MainThread.InvokeOnMainThreadAsync(async () =>
+                {
+                    await Application.Current.MainPage.DisplayAlert(title, message, "Tamam");
+                });
+            }
+        }
+
         [RelayCommand]
         async Task SaveServerIp()
         {
             if (string.IsNullOrWhiteSpace(ServerIp))
             {
-                await Shell.Current.DisplayAlert("Hata", "IP adresi boş olamaz.", "Tamam");
+                await ShowAlertAsync("Hata", "IP adresi boş olamaz.");
                 return;
             }
 
-            // Ayarları Kaydet
-            Preferences.Set("ServerIP", ServerIp);
-            Preferences.Set("DbUser", DbUser);
-            Preferences.Set("DbPassword", DbPassword);
+            if (IsBusy) return;
+            IsBusy = true; // İşlem başladı, butonlar kilitlendi
 
-            // Durumu güncelle
-            SetConnectedState(true);
+            try
+            {
+                // 1. Güvenli Bağlantı Dizesi Oluşturma (Özel karakter hatasını önler)
+                var builder = new SqlConnectionStringBuilder
+                {
+                    DataSource = ServerIp,
+                    InitialCatalog = "TrackerDB",
+                    UserID = DbUser,
+                    Password = DbPassword,
+                    TrustServerCertificate = true,
+                    ConnectTimeout = 5 // 5 saniye bekle
+                };
 
-            await Shell.Current.DisplayAlert("Başarılı", "Bağlantı ayarları kaydedildi ve aktifleşti.", "Tamam");
+                // 2. Bağlantıyı Test Et
+                using (var connection = new SqlConnection(builder.ConnectionString))
+                {
+                    await connection.OpenAsync();
+                }
+
+                // --- TEST BAŞARILIYSA ---
+
+                // Ayarları Kaydet
+                Preferences.Set("ServerIP", ServerIp);
+                Preferences.Set("DbUser", DbUser);
+                Preferences.Set("DbPassword", DbPassword);
+
+                // Durumu güncelle
+                SetConnectedState(true);
+
+                // DÜZELTME BURADA: 'isConnected' yerine 'IsConnected' (Büyük harf)
+                if (IsConnected)
+                {
+                    await LoadGlobalAttachmentPath();
+                }
+
+                await ShowAlertAsync("Başarılı", "Bağlantı testi başarılı ve ayarlar kaydedildi.");
+            }
+            catch (SqlException ex)
+            {
+                // SQL Hatası (Şifre yanlış, IP yanlış vb.)
+                SetConnectedState(false);
+                await ShowAlertAsync("Bağlantı Hatası", $"Veritabanına bağlanılamadı.\n\nHata: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                // Beklenmedik Hata
+                SetConnectedState(false);
+                await ShowAlertAsync("Hata", $"Beklenmedik bir hata oluştu: {ex.Message}");
+            }
+            finally
+            {
+                // *** KRİTİK NOKTA ***
+                // Hata olsa da olmasa da işlem bitince burası ÇALIŞIR.
+                // Böylece butonun kilidi mutlaka açılır.
+                IsBusy = false;
+            }
         }
-
 
         [RelayCommand]
         async Task Disconnect()
         {
-            bool answer = await Shell.Current.DisplayAlert("Bağlantıyı Kes",
+            if (Application.Current?.MainPage == null) return;
+
+            bool answer = await Application.Current.MainPage.DisplayAlert("Bağlantıyı Kes",
                 "Sunucu bağlantısını kesmek istiyor musunuz?",
                 "Evet, Kes", "İptal");
 
@@ -166,7 +273,8 @@ namespace EquipmentTracker.ViewModels
             // Durumu güncelle
             SetConnectedState(false);
 
-            await Shell.Current.DisplayAlert("Bilgi", "Bağlantı kesildi. Yeni ayar girebilirsiniz.", "Tamam");
+            await Application.Current.MainPage.DisplayAlert("Bilgi", "Bağlantı kesildi. Yeni ayar girebilirsiniz.", "Tamam");
+        
         }
 
         /// <summary>
@@ -205,38 +313,45 @@ namespace EquipmentTracker.ViewModels
         [RelayCommand]
         async Task SaveAttachmentPath()
         {
-            if (string.IsNullOrWhiteSpace(AttachmentPath))
+            if (!IsAdminUser) // IsAdminUser property'niz zaten vardı
             {
-                await Shell.Current.DisplayAlert("Hata", "Dosya yolu boş olamaz.", "Tamam");
+                await ShowAlertAsync("Yetkisiz", "Bu ayarı sadece yöneticiler değiştirebilir.");
                 return;
             }
+
+            if (string.IsNullOrWhiteSpace(AttachmentPath)) return;
 
             if (IsBusy) return;
             IsBusy = true;
 
-            // Klasörü oluşturmayı dene (izin kontrolü için)
             try
             {
-                if (!Directory.Exists(Path.Combine(AttachmentPath, "Attachments")))
+                // 1. Erişim Testi (Klasör oluşturmayı dene)
+                string testPath = Path.Combine(AttachmentPath, "Attachments");
+                if (!Directory.Exists(testPath))
                 {
-                    Directory.CreateDirectory(Path.Combine(AttachmentPath, "Attachments"));
+                    Directory.CreateDirectory(testPath);
                 }
 
-                // Yolu kaydet
-                Preferences.Set("attachment_path", AttachmentPath);
-                await Shell.Current.DisplayAlert("Başarılı", "Yeni dosya yolu kaydedildi.", "Tamam");
+                // 2. Veritabanına Kaydet
+                var jobService = Application.Current.Handler.MauiContext.Services.GetService<IJobService>();
+                await jobService.SetGlobalAttachmentPathAsync(AttachmentPath);
+
+                await ShowAlertAsync("Başarılı", "Dosya yolu kaydedildi ve tüm kullanıcılara yansıtıldı.");
+            }
+            catch (UnauthorizedAccessException)
+            {
+                await ShowAlertAsync("Erişim Hatası", "Uygulamanın bu klasöre yazma izni yok. Lütfen klasör özelliklerinden 'Everyone' için 'Tam Denetim' verin.");
             }
             catch (Exception ex)
             {
-                // Genellikle 'C:\' gibi izin olmayan bir yere kaydetmeye çalışınca bu hata alınır.
-                await Shell.Current.DisplayAlert("Hata", $"Yol kaydedilemedi. Geçerli bir klasör olduğundan emin olun.\n\nHata: {ex.Message}", "Tamam");
+                await ShowAlertAsync("Hata", $"Klasör hatası: {ex.Message}");
             }
             finally
             {
                 IsBusy = false;
             }
         }
-
 
     }
 }

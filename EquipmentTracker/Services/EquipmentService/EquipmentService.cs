@@ -22,23 +22,26 @@ namespace EquipmentTracker.Services.EquipmentService
             return Path.Combine(basePath, "Attachments");
         }
 
-        private static string SanitizeFolderName(string folderName)
+        private static string SanitizeFolderName(string name)
         {
-            if (string.IsNullOrEmpty(folderName))
-                return string.Empty;
+            if (string.IsNullOrEmpty(name)) return "Unknown";
 
-            string sanitizedName = Regex.Replace(folderName, @"[\\/:*?""<>| ]", "_");
-            sanitizedName = Regex.Replace(sanitizedName, @"_+", "_");
-            return sanitizedName.Trim('_');
+            // Windows dosya sisteminde yasaklı karakterleri temizle
+            foreach (char c in Path.GetInvalidFileNameChars())
+            {
+                name = name.Replace(c, '_');
+            }
+            return name.Trim();
         }
 
+        // 2. Ana Metot (Ağ Yolu Entegrasyonu Yapıldı)
         public async Task<Equipment> AddEquipmentAsync(JobModel parentJob, Equipment newEquipment)
         {
             using var transaction = await _context.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable);
 
             try
             {
-                // 1. Bu işe ait en son ekipman ID'sini bul
+                // 1. Bu işe ait en son ekipman ID'sini bul (AYNI KALIYOR)
                 var allEquipmentIds = await _context.Equipments
                     .Where(e => e.JobId == parentJob.Id)
                     .Select(e => e.EquipmentId)
@@ -54,29 +57,47 @@ namespace EquipmentTracker.Services.EquipmentService
                 }
                 int nextId = maxId + 1;
 
-                // 2. Yeni numaraları ata
+                // 2. Yeni numaraları ata (AYNI KALIYOR)
                 newEquipment.EquipmentId = nextId.ToString();
                 newEquipment.EquipmentCode = $"{parentJob.JobNumber}.{nextId}";
                 newEquipment.JobId = parentJob.Id;
 
-                // 3. Kaydet
+                // 3. Veritabanına Kaydet (AYNI KALIYOR)
                 _context.Equipments.Add(newEquipment);
                 await _context.SaveChangesAsync();
 
-                // Entity takibini bırak (UI sorunlarını önlemek için)
+                // Entity takibini bırak
                 _context.Entry(newEquipment).State = EntityState.Detached;
 
-                // 4. Klasör Oluşturma
+                // --- 4. Klasör Oluşturma (GÜNCELLENDİ: Ortak Ağ Yolu) ---
                 try
                 {
-                    string baseAttachmentPath = GetCurrentAttachmentPath();
+                    // A. Ortak Yolu (Veritabanından) Çek
+                    string dbPath;
+                    var setting = await _context.AppSettings
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(x => x.Key == "AttachmentPath");
+
+                    if (setting != null && !string.IsNullOrWhiteSpace(setting.Value))
+                        dbPath = setting.Value; // Veritabanındaki yol (Örn: \\SERVER\TrackerData)
+                    else
+                        dbPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TrackerDatabase");
+
+                    // B. Ana Klasör Yolu
+                    string baseAttachmentPath = Path.Combine(dbPath, "Attachments");
+
+                    // C. İsimleri Temizle
                     string safeJobName = SanitizeFolderName(parentJob.JobName);
-                    string jobFolder = $"{parentJob.JobNumber}_{safeJobName}";
                     string safeEquipName = SanitizeFolderName(newEquipment.Name);
+
+                    // D. Klasör İsimleri
+                    string jobFolder = $"{parentJob.JobNumber}_{safeJobName}";
                     string equipFolder = $"{parentJob.JobNumber}_{newEquipment.EquipmentId}_{safeEquipName}";
 
+                    // E. Hedef Yolu Birleştir: ...\Attachments\İşKlasörü\EkipmanKlasörü
                     string targetDirectory = Path.Combine(baseAttachmentPath, jobFolder, equipFolder);
 
+                    // F. Klasörü Oluştur (Erişim izni varsa oluşturur)
                     if (!Directory.Exists(targetDirectory))
                     {
                         Directory.CreateDirectory(targetDirectory);
@@ -84,8 +105,10 @@ namespace EquipmentTracker.Services.EquipmentService
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine($"Equipment klasörü hatası: {ex.Message}");
+                    // Klasör hatası işlemi geri almasın, loglayıp devam etsin
+                    System.Diagnostics.Debug.WriteLine($"Equipment klasörü oluşturulamadı: {ex.Message}");
                 }
+                // -----------------------------------------------------------
 
                 await transaction.CommitAsync();
                 return newEquipment;
@@ -96,7 +119,6 @@ namespace EquipmentTracker.Services.EquipmentService
                 throw;
             }
         }
-
         public async Task ToggleEquipmentStatusAsync(int equipmentId, bool isCancelled)
         {
             var equipment = await _context.Equipments.FindAsync(equipmentId);

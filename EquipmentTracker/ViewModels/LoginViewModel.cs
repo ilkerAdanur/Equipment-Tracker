@@ -1,7 +1,8 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using EquipmentTracker.Services.Auth;
-using EquipmentTracker.Services.Job; // InitializeDatabase için
+using EquipmentTracker.Services.Job;
+using EquipmentTracker.Views; // InitializeDatabase için
 
 namespace EquipmentTracker.ViewModels
 {
@@ -20,62 +21,72 @@ namespace EquipmentTracker.ViewModels
         {
             _authService = authService;
             _jobService = jobService;
-            Title = "Giriş Yap";
         }
 
         [RelayCommand]
         async Task Login()
         {
-            if (IsBusy) return;
-            IsBusy = true;
+            if (IsBusy) return; // Zaten işlem yapılıyorsa tekrar basmayı engelle
+            IsBusy = true;      // Çark dönmeye başlasın
 
             try
             {
-                // 1. Veritabanının var olduğundan emin ol (İlk açılışta çok önemli)
+                // 1. Veritabanı Oluşturma Kontrolü (Sadece bir kez)
                 if (!MauiProgram.IsDatabaseInitialized)
                 {
+                    // Burada hata alırsak catch'e düşer ve mesaj gösteririz
                     await _jobService.InitializeDatabaseAsync();
                     MauiProgram.IsDatabaseInitialized = true;
                 }
 
-                // 2. Kullanıcı adı şifre kontrolü
+                // 2. Basit Kontroller
                 if (string.IsNullOrWhiteSpace(Username) || string.IsNullOrWhiteSpace(Password))
                 {
-                    await Shell.Current.DisplayAlert("Hata", "Lütfen kullanıcı adı ve şifre girin.", "Tamam");
+                    if (Application.Current?.MainPage != null)
+                        await Application.Current.MainPage.DisplayAlert("Uyarı", "Kullanıcı adı ve şifre gereklidir.", "Tamam");
                     return;
                 }
 
+                // 3. Giriş İşlemi
                 var user = await _authService.LoginAsync(Username, Password);
 
                 if (user != null)
                 {
-                    // 3. BAŞARILI: Kullanıcıyı global değişkene ata
+                    // BAŞARILI
                     App.CurrentUser = user;
-
-                    // 4. Ana Uygulamaya (AppShell) Geçiş Yap
-                    // Application.Current.MainPage'i değiştirerek navigasyon yığınını sıfırlıyoruz.
                     Application.Current.MainPage = new AppShell();
                 }
                 else
                 {
-                    await Application.Current.MainPage.DisplayAlert("Hata", "Kullanıcı adı veya şifre hatalı.", "Tamam");
+                    // BAŞARISIZ (Kullanıcı yok veya şifre yanlış)
+                    if (Application.Current?.MainPage != null)
+                        await Application.Current.MainPage.DisplayAlert("Hata", "Kullanıcı adı veya şifre hatalı.", "Tamam");
                 }
             }
             catch (Exception ex)
             {
-                await Application.Current.MainPage.DisplayAlert("Hata", $"Giriş yapılırken hata oluştu. Veritabanı bağlantısını kontrol edin.\n{ex.Message}", "Tamam");
+                // KRİTİK HATA (Sunucuya ulaşılamadı vb.)
+                if (Application.Current?.MainPage != null)
+                    await Application.Current.MainPage.DisplayAlert("Bağlantı Hatası",
+                        $"Sunucuya bağlanılamadı. Lütfen internet bağlantınızı ve Sunucu IP ayarlarını kontrol edin.\n\nHata Detayı: {ex.Message}",
+                        "Tamam");
             }
             finally
             {
+                // *** BU KISIM HAYAT KURTARIR ***
+                // Hata olsa da, giriş yapılsa da, şifre yanlış olsa da BURASI ÇALIŞIR.
+                // Çarkı durdurur ve donmayı önler.
                 IsBusy = false;
             }
         }
-
         // Ayarlar sayfasına gitmek için (IP değiştirmek gerekebilir)
         [RelayCommand]
         async Task GoToSettings()
         {
-            await Application.Current.MainPage.Navigation.PushAsync(new Views.SettingsPage(new SettingsViewModel(CommunityToolkit.Maui.Storage.FolderPicker.Default)));
+            // Settings sayfasını aç
+            var services = Application.Current.Handler.MauiContext.Services;
+            await Application.Current.MainPage.Navigation.PushAsync(new SettingsPage(
+                new SettingsViewModel(CommunityToolkit.Maui.Storage.FolderPicker.Default, services)));
         }
     }
 }

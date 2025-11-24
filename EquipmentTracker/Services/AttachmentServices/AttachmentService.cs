@@ -132,24 +132,64 @@ namespace EquipmentTracker.Services.AttachmentServices
 
         public async Task<EquipmentAttachment> AddAttachmentAsync(JobModel parentJob, Equipment parentEquipment, FileResult fileToCopy)
         {
-            // 1. Klasör Yolları
-            string baseAttachmentPath = Path.Combine(GetBaseDatabasePath(), "Attachments");
+            // 1. ADIM: Ortak Yolu (Veritabanından) Belirle
+            string dbPath;
+            try
+            {
+                // Veritabanından 'AttachmentPath' ayarını çek
+                var setting = await _context.AppSettings
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(x => x.Key == "AttachmentPath");
+
+                if (setting != null && !string.IsNullOrWhiteSpace(setting.Value))
+                {
+                    dbPath = setting.Value; // Veritabanındaki yol (Örn: \\SERVER\TrackerData)
+                }
+                else
+                {
+                    // Ayar yoksa varsayılan yerel belgelerim
+                    dbPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TrackerDatabase");
+                }
+            }
+            catch
+            {
+                // Veritabanı hatası olursa varsayılan yol
+                dbPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TrackerDatabase");
+            }
+
+            // 2. ADIM: Ana Klasör Yolunu Oluştur
+            // DÜZELTME BURADA: GetBaseDatabasePath() yerine 'dbPath' kullanıyoruz.
+            string baseAttachmentPath = Path.Combine(dbPath, "Attachments");
+
+            // Eğer ağdaki ana klasör (Attachments) yoksa oluşturmayı dene
+            if (!Directory.Exists(baseAttachmentPath))
+            {
+                Directory.CreateDirectory(baseAttachmentPath);
+            }
+
+            // 3. ADIM: Klasör İsimlendirmeleri
             string safeJobName = SanitizeFolderName(parentJob.JobName);
             string safeEquipName = SanitizeFolderName(parentEquipment.Name);
+
             string jobFolder = $"{parentJob.JobNumber}_{safeJobName}";
             string equipFolder = $"{parentJob.JobNumber}_{parentEquipment.EquipmentId}_{safeEquipName}";
+
+            // Hedef: ...\Attachments\İşNo_Adı\İşNo_EkipmanID_Adı
             string targetDirectory = Path.Combine(baseAttachmentPath, jobFolder, equipFolder);
 
+            // Alt klasörleri oluştur
             if (!Directory.Exists(targetDirectory)) Directory.CreateDirectory(targetDirectory);
 
-            // 2. Dosyayı Kopyala
+            // 4. ADIM: Dosyayı Kopyala
             string targetFilePath = Path.Combine(targetDirectory, fileToCopy.FileName);
+
             using (var sourceStream = await fileToCopy.OpenReadAsync())
             using (var targetStream = File.Create(targetFilePath))
             {
                 await sourceStream.CopyToAsync(targetStream);
             }
 
+            // 5. ADIM: Veritabanı Kaydı
             var newAttachment = new EquipmentAttachment
             {
                 FileName = fileToCopy.FileName,
@@ -164,19 +204,20 @@ namespace EquipmentTracker.Services.AttachmentServices
             await _context.SaveChangesAsync();
             _context.Entry(newAttachment).State = EntityState.Detached;
 
-            // GÜNCELLEME: İsimlendirme formatı ve yeni metoda çağrı
+            // 6. ADIM: DWG/DXF ise Küçük Resim İşlemini Başlat
             string extension = Path.GetExtension(targetFilePath).ToLower();
             if (extension == ".dwg" || extension == ".dxf")
             {
                 string cleanFileName = Path.GetFileNameWithoutExtension(fileToCopy.FileName);
                 string thumbName = $"{parentJob.JobNumber}_{parentEquipment.EquipmentId}_{cleanFileName}_thumb.png";
 
-                // DEĞİŞİKLİK BURADA: newAttachment nesnesinin kendisini gönderiyoruz.
+                // Arka plan işlemini başlat (Nesnenin kendisini gönderiyoruz)
                 _ = Task.Run(() => GenerateAndSaveThumbnailInBackground(newAttachment, targetFilePath, thumbName));
             }
 
             return newAttachment;
         }
+
 
         public async Task OpenAttachmentAsync(EquipmentAttachment attachment)
         {

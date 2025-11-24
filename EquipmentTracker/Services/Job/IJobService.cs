@@ -15,5 +15,7 @@ public interface IJobService
     Task InitializeDatabaseAsync();
     Task UpdateJob(int jobId, JobModel newJob);
     Task ToggleJobStatusAsync(int jobId, bool isCancelled);
+    Task<string> GetGlobalAttachmentPathAsync();
+    Task SetGlobalAttachmentPathAsync(string path);
 
 }

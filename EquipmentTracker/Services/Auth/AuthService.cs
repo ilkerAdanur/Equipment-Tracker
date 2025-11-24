@@ -15,27 +15,48 @@ namespace EquipmentTracker.Services.Auth
 
         public async Task<User> LoginAsync(string username, string password)
         {
-            var user = await _context.Users
-                .FirstOrDefaultAsync(u => u.Username == username && u.Password == password);
-
-            if (user != null)
+            try
             {
-                // Kullanıcıyı online olarak işaretle
-                user.IsOnline = true;
-                await _context.SaveChangesAsync();
-            }
+                // AsNoTracking performans artırır
+                var user = await _context.Users
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(u => u.Username == username && u.Password == password);
 
-            return user;
+                if (user != null)
+                {
+                    // Kullanıcıyı online yap
+                    var userToUpdate = await _context.Users.FindAsync(user.Id);
+                    if (userToUpdate != null)
+                    {
+                        userToUpdate.IsOnline = true;
+                        await _context.SaveChangesAsync();
+                    }
+                }
+
+                return user;
+            }
+            catch (Exception)
+            {
+                // Hatayı burada yutma (catch boş olmasın), yukarı fırlat!
+                // Böylece LoginViewModel hatayı yakalar ve ekrana basar.
+                throw;
+            }
         }
 
         public async Task LogoutAsync(int userId)
         {
-            var user = await _context.Users.FindAsync(userId);
-            if (user != null)
+            try
             {
-                user.IsOnline = false;
-                await _context.SaveChangesAsync();
-                _context.Entry(user).State = EntityState.Detached;
+                var user = await _context.Users.FindAsync(userId);
+                if (user != null)
+                {
+                    user.IsOnline = false;
+                    await _context.SaveChangesAsync();
+                }
+            }
+            catch
+            {
+                // Çıkış yaparken hata olursa çok önemli değil, kullanıcıyı üzmeyelim.
             }
         }
 
@@ -57,6 +78,12 @@ namespace EquipmentTracker.Services.Auth
                 await _context.SaveChangesAsync();
                 _context.Entry(user).State = EntityState.Detached;
             }
+        }
+
+        public async Task<bool> IsUserActiveAsync(int userId)
+        {
+            var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId);
+            return user != null && user.IsOnline;
         }
     }
 }

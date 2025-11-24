@@ -124,19 +124,59 @@ namespace EquipmentTracker.Services.EquipmentPartAttachmentServices
 
         public async Task<EquipmentPartAttachment> AddAttachmentAsync(JobModel parentJob, Equipment parentEquipment, EquipmentPart parentPart, FileResult fileToCopy)
         {
-            // ... (Klasör ve dosya kopyalama işlemleri AYNI KALIYOR - Dokunmayın) ...
-            string baseAttachmentPath = Path.Combine(GetBaseDatabasePath(), "Attachments");
+            // --- 1. ADIM: Ortak Yolu (Veritabanından) Belirle ---
+            string dbPath;
+            try
+            {
+                // Veritabanından 'AttachmentPath' ayarını çek (Örn: \\SERVER\TrackerData)
+                var setting = await _context.AppSettings
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(x => x.Key == "AttachmentPath");
+
+                if (setting != null && !string.IsNullOrWhiteSpace(setting.Value))
+                {
+                    dbPath = setting.Value;
+                }
+                else
+                {
+                    // Ayar yoksa varsayılan yerel belgelerim
+                    dbPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TrackerDatabase");
+                }
+            }
+            catch
+            {
+                // Veritabanı hatası olursa varsayılan yol
+                dbPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TrackerDatabase");
+            }
+
+            // --- 2. ADIM: Klasör Yapısını Oluştur ---
+
+            // Ana klasör yolu (Örn: \\SERVER\TrackerData\Attachments)
+            string baseAttachmentPath = Path.Combine(dbPath, "Attachments");
+
+            // Eğer ağdaki ana klasör yoksa oluşturmayı dene (İzin varsa oluşturur)
+            if (!Directory.Exists(baseAttachmentPath))
+            {
+                Directory.CreateDirectory(baseAttachmentPath);
+            }
+
+            // İsimleri temizle
             string safeJobName = SanitizeFolderName(parentJob.JobName);
             string safeEquipName = SanitizeFolderName(parentEquipment.Name);
             string safePartName = SanitizeFolderName(parentPart.Name);
 
+            // Klasör isimlerini oluştur
             string jobFolder = $"{parentJob.JobNumber}_{safeJobName}";
             string equipFolder = $"{parentJob.JobNumber}_{parentEquipment.EquipmentId}_{safeEquipName}";
             string partFolder = $"{parentJob.JobNumber}_{parentEquipment.EquipmentId}_{parentPart.PartId}_{safePartName}";
 
+            // Tam Hedef Yolu: ...\Attachments\İş\Ekipman\Parça
             string targetDirectory = Path.Combine(baseAttachmentPath, jobFolder, equipFolder, partFolder);
+
+            // Hedef klasörü oluştur
             if (!Directory.Exists(targetDirectory)) Directory.CreateDirectory(targetDirectory);
 
+            // --- 3. ADIM: Dosyayı Kopyala ---
             string targetFilePath = Path.Combine(targetDirectory, fileToCopy.FileName);
 
             using (var sourceStream = await fileToCopy.OpenReadAsync())
@@ -144,34 +184,37 @@ namespace EquipmentTracker.Services.EquipmentPartAttachmentServices
             {
                 await sourceStream.CopyToAsync(targetStream);
             }
-            // ... (Buraya kadar olan kısım muhtemelen sizde zaten var) ...
 
+            // --- 4. ADIM: Veritabanı Kaydı ---
             var newAttachment = new EquipmentPartAttachment
             {
                 FileName = fileToCopy.FileName,
                 FilePath = targetFilePath,
                 ThumbnailPath = null,
                 EquipmentPartId = parentPart.Id,
-                IsProcessing = false,    // YENİ
-                ProcessingProgress = 0   // YENİ
+                IsProcessing = false,
+                ProcessingProgress = 0
             };
 
             _context.EquipmentPartAttachments.Add(newAttachment);
             await _context.SaveChangesAsync();
             _context.Entry(newAttachment).State = EntityState.Detached;
 
+            // --- 5. ADIM: Küçük Resim İşlemi ---
             string extension = Path.GetExtension(targetFilePath).ToLower();
             if (extension == ".dwg" || extension == ".dxf")
             {
                 string cleanFileName = Path.GetFileNameWithoutExtension(fileToCopy.FileName);
+                // Parça için benzersiz isim formatı
                 string thumbName = $"{parentJob.JobNumber}_{parentEquipment.EquipmentId}_{parentPart.PartId}_{cleanFileName}_thumb.png";
 
-                // YENİ: Nesnenin kendisini gönderiyoruz
+                // Arka plan işlemini başlat (Nesnenin kendisini gönderiyoruz)
                 _ = Task.Run(() => GenerateAndSaveThumbnailInBackground(newAttachment, targetFilePath, thumbName));
             }
 
             return newAttachment;
         }
+
         public async Task OpenAttachmentAsync(EquipmentPartAttachment attachment)
         {
             if (attachment == null || string.IsNullOrEmpty(attachment.FilePath)) return;
