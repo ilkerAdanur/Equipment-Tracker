@@ -129,7 +129,7 @@
                             </CollectionView.EmptyView>
 
                             <CollectionView.ItemTemplate>
-                                <DataTemplate x:DataType="models:User">
+                                <DataTemplate x:DataType="models:Users">
                                     <Grid ColumnDefinitions="*, Auto" Padding="5">
 
                                         <VerticalStackLayout Grid.Column="0" VerticalOptions="Center">

@@ -189,11 +189,15 @@ namespace EquipmentTracker.ViewModels
             }
 
             if (IsBusy) return;
-            IsBusy = true; // İşlem başladı, butonlar kilitlendi
+            IsBusy = true;
+
+            // Ayarları şimdiden kaydedelim ki JobService (DataContext) bunları kullanabilsin
+            Preferences.Set("ServerIP", ServerIp);
+            Preferences.Set("DbUser", DbUser);
+            Preferences.Set("DbPassword", DbPassword);
 
             try
             {
-                // 1. Güvenli Bağlantı Dizesi Oluşturma (Özel karakter hatasını önler)
                 var builder = new SqlConnectionStringBuilder
                 {
                     DataSource = ServerIp,
@@ -201,53 +205,69 @@ namespace EquipmentTracker.ViewModels
                     UserID = DbUser,
                     Password = DbPassword,
                     TrustServerCertificate = true,
-                    ConnectTimeout = 5 // 5 saniye bekle
+                    ConnectTimeout = 5
                 };
 
-                // 2. Bağlantıyı Test Et
+                // 1. Bağlantıyı Test Et
                 using (var connection = new SqlConnection(builder.ConnectionString))
                 {
                     await connection.OpenAsync();
                 }
 
-                // --- TEST BAŞARILIYSA ---
-
-                // Ayarları Kaydet
-                Preferences.Set("ServerIP", ServerIp);
-                Preferences.Set("DbUser", DbUser);
-                Preferences.Set("DbPassword", DbPassword);
-
-                // Durumu güncelle
+                // --- BAĞLANTI BAŞARILIYSA ---
                 SetConnectedState(true);
-
-                // DÜZELTME BURADA: 'isConnected' yerine 'IsConnected' (Büyük harf)
-                if (IsConnected)
-                {
-                    await LoadGlobalAttachmentPath();
-                }
-
-                await ShowAlertAsync("Başarılı", "Bağlantı testi başarılı ve ayarlar kaydedildi.");
+                if (IsConnected) await LoadGlobalAttachmentPath();
+                await ShowAlertAsync("Başarılı", "Bağlantı sağlandı ve ayarlar kaydedildi.");
             }
             catch (SqlException ex)
             {
-                // SQL Hatası (Şifre yanlış, IP yanlış vb.)
-                SetConnectedState(false);
-                await ShowAlertAsync("Bağlantı Hatası", $"Veritabanına bağlanılamadı.\n\nHata: {ex.Message}");
+                // *** ÖZEL DURUM: Veritabanı Yok Hatası (Hata Kodu 4060) ***
+                if (ex.Number == 4060)
+                {
+                    try
+                    {
+                        // Kullanıcıya sormadan veya sorarak otomatik kur
+                        // "Veritabanı bulunamadı. Otomatik oluşturuluyor..." gibi bir mesaj (Toast) verilebilir.
+
+                        using (var scope = _serviceProvider.CreateScope())
+                        {
+                            var jobService = scope.ServiceProvider.GetRequiredService<IJobService>();
+
+                            // Veritabanını ve Tabloları Oluştur + Admin Ekle
+                            await jobService.InitializeDatabaseAsync();
+                        }
+
+                        // Tekrar bağlanmayı dene (Teyit amaçlı)
+                        SetConnectedState(true);
+                        await LoadGlobalAttachmentPath();
+
+                        await ShowAlertAsync("Kurulum Tamamlandı",
+                            "Veritabanı bulunamadığı için otomatik olarak oluşturuldu ve varsayılan veriler (Admin) eklendi. Bağlantı başarılı.");
+                    }
+                    catch (Exception createEx)
+                    {
+                        SetConnectedState(false);
+                        await ShowAlertAsync("Kurulum Hatası", $"Veritabanı oluşturulurken hata çıktı: {createEx.Message}");
+                    }
+                }
+                else
+                {
+                    // Diğer SQL hataları (Şifre yanlış, Sunucu kapalı vs.)
+                    SetConnectedState(false);
+                    await ShowAlertAsync("Bağlantı Hatası", $"Sunucuya bağlanılamadı.\nHata Kodu: {ex.Number}\nMesaj: {ex.Message}");
+                }
             }
             catch (Exception ex)
             {
-                // Beklenmedik Hata
                 SetConnectedState(false);
-                await ShowAlertAsync("Hata", $"Beklenmedik bir hata oluştu: {ex.Message}");
+                await ShowAlertAsync("Hata", $"Beklenmedik bir hata: {ex.Message}");
             }
             finally
             {
-                // *** KRİTİK NOKTA ***
-                // Hata olsa da olmasa da işlem bitince burası ÇALIŞIR.
-                // Böylece butonun kilidi mutlaka açılır.
                 IsBusy = false;
             }
         }
+
 
         [RelayCommand]
         async Task Disconnect()

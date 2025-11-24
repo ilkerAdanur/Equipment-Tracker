@@ -28,7 +28,7 @@ namespace EquipmentTracker.ViewModels
         [ObservableProperty]
         string _connectionErrorMessage;
 
-        public ObservableCollection<User> ActiveUsers { get; set; } = new();
+        public ObservableCollection<Users> ActiveUsers { get; set; } = new();
         public bool IsAdminUser => App.CurrentUser?.IsAdmin ?? false;
 
         public DashboardViewModel(IServiceProvider serviceProvider)
@@ -115,7 +115,7 @@ namespace EquipmentTracker.ViewModels
 
 
         [RelayCommand]
-        async Task DisconnectUser(User userToDisconnect)
+        async Task DisconnectUser(Users userToDisconnect)
         {
             if (userToDisconnect == null) return;
 

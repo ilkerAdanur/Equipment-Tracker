@@ -13,7 +13,7 @@ namespace EquipmentTracker.Services.Auth
             _context = context;
         }
 
-        public async Task<User> LoginAsync(string username, string password)
+        public async Task<Users> LoginAsync(string username, string password)
         {
             try
             {
@@ -61,7 +61,7 @@ namespace EquipmentTracker.Services.Auth
         }
 
         // Sadece Online olanları getir
-        public async Task<List<User>> GetActiveUsersAsync()
+        public async Task<List<Users>> GetActiveUsersAsync()
         {
             return await _context.Users
                 .Where(u => u.IsOnline == true)

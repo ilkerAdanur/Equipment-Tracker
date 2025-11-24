@@ -89,56 +89,90 @@ namespace EquipmentTracker.Services.Job
             return name.Trim();
         }
 
-        private async Task SeedDataIfNeededAsync()
+        //private async Task SeedDataIfNeededAsync()
+        //{
+        //    if (await _context.Jobs.AnyAsync()) return;
+
+        //    var job1 = new JobModel
+        //    {
+        //        JobNumber = "1",
+        //        JobName = "AŞKALE ÇİMENTO PAKET ARITMASI",
+        //        JobOwner = "STH ÇEVRE",
+        //        Date = DateTime.Now,
+        //        JobDescription = "Otomatik oluşturulan örnek veri.",
+        //        MainApproval = ApprovalStatus.Pending
+        //    };
+
+        //    var job2 = new JobModel
+        //    {
+        //        JobNumber = "2",
+        //        JobName = "TRABZON SU ARITMA TESİSİ",
+        //        JobOwner = "TİSKİ",
+        //        Date = DateTime.Now.AddDays(5),
+        //        JobDescription = "Otomatik oluşturulan örnek veri.",
+        //        MainApproval = ApprovalStatus.Approved
+        //    };
+
+        //    if (!await _context.Users.AnyAsync())
+        //    {
+        //        _context.Users.Add(new Users
+        //        {
+        //            Username = "admin",
+        //            Password = "123",
+        //            IsAdmin = true,
+        //            FullName = "System Admin"
+        //        });
+        //        await _context.SaveChangesAsync();
+        //    }
+
+        //    await _context.Jobs.AddRangeAsync(job1, job2);
+        //    await _context.SaveChangesAsync();
+        //}
+
+        private async Task SeedDataAsync()
         {
-            if (await _context.Jobs.AnyAsync()) return;
-
-            var job1 = new JobModel
+            // A. Varsayılan Admin Kullanıcısı Ekle
+            if (!await _context.Users.AnyAsync())
             {
-                JobNumber = "1",
-                JobName = "AŞKALE ÇİMENTO PAKET ARITMASI",
-                JobOwner = "STH ÇEVRE",
-                Date = DateTime.Now,
-                JobDescription = "Otomatik oluşturulan örnek veri.",
-                MainApproval = ApprovalStatus.Pending
-            };
+                var adminUser = new Users
+                {
+                    Username = "admin",
+                    Password = "123", // Güçlü bir şifre belirleyebilirsiniz
+                    FullName = "Sistem Yöneticisi",
+                    IsAdmin = true,
+                    IsOnline = false
+                };
+                _context.Users.Add(adminUser);
+                await _context.SaveChangesAsync();
+            }
 
-            var job2 = new JobModel
+            // B. Varsayılan Dosya Yolu Ayarını Ekle
+            var pathSetting = await _context.AppSettings.FirstOrDefaultAsync(x => x.Key == "AttachmentPath");
+            if (pathSetting == null)
             {
-                JobNumber = "2",
-                JobName = "TRABZON SU ARITMA TESİSİ",
-                JobOwner = "TİSKİ",
-                Date = DateTime.Now.AddDays(5),
-                JobDescription = "Otomatik oluşturulan örnek veri.",
-                MainApproval = ApprovalStatus.Approved
-            };
-
-            await _context.Jobs.AddRangeAsync(job1, job2);
-            await _context.SaveChangesAsync();
+                // Varsayılan olarak sunucunun C diskinde bir klasör öneriyoruz (Admin sonra değiştirebilir)
+                // Veya boş bırakıp Admin'in seçmesini bekleyebiliriz.
+                _context.AppSettings.Add(new AppSetting
+                {
+                    Key = "AttachmentPath",
+                    Value = @"C:\TrackerDatabase" // Başlangıç değeri
+                });
+                await _context.SaveChangesAsync();
+            }
         }
-
-
         public async Task InitializeDatabaseAsync()
         {
             try
             {
-                // 1. Veritabanı yoksa oluştur (Admin kullanıcısı ve Tablolar dahil)
-                // Bu işlem SQL Server'daki 'dbUser' yetkilerini kullanır.
+                // 1. Veritabanı ve Tabloları Oluştur (Eğer yoksa)
                 await _context.Database.EnsureCreatedAsync();
 
-                // 2. Ekstra başlangıç verileri (Varsa JobService içindeki seed)
-                await SeedDataIfNeededAsync();
-            }
-            catch (Microsoft.Data.SqlClient.SqlException ex)
-            {
-                // Bağlantı hatası loglanır
-                Debug.WriteLine($"SQL Hatası: {ex.Message}");
-                // Burada UI'a bir sinyal gönderip "Ayarlar sayfasına git" denilebilir.
-                throw; // Hatayı yukarı fırlat ki ViewModel yakalayabilsin
+                // 2. Başlangıç Verilerini Doldur (Seed)
+                await SeedDataAsync();
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Genel Veritabanı Hatası: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"Veritabanı başlatma hatası: {ex.Message}");
                 throw;
             }
         }
@@ -147,7 +181,10 @@ namespace EquipmentTracker.Services.Job
 
         public async Task<List<JobModel>> GetAllJobsAsync()
         {
-            var jobs = await _context.Jobs.ToListAsync();
+            var jobs = await _context.Jobs
+                .AsNoTracking()
+                .ToListAsync();
+
             return jobs.OrderBy(j => j.JobNumber.Length).ThenBy(j => j.JobNumber).ToList();
         }
 
@@ -162,20 +199,39 @@ namespace EquipmentTracker.Services.Job
 
         public async Task<string> GetNextJobNumberAsync()
         {
-            var allJobs = await _context.Jobs.Select(j => j.JobNumber).ToListAsync();
-            if (!allJobs.Any()) return "1";
-            int maxNumber = 0;
-            foreach (var numStr in allJobs) { if (int.TryParse(numStr, out int num)) { if (num > maxNumber) maxNumber = num; } }
-            return (maxNumber + 1).ToString();
+            try
+            {
+                // Sadece JobNumber sütununu çek (Tüm tabloyu değil)
+                var allJobNumbers = await _context.Jobs
+                    .AsNoTracking()
+                    .Select(j => j.JobNumber)
+                    .ToListAsync();
+
+                if (!allJobNumbers.Any()) return "1";
+
+                int maxNumber = 0;
+                foreach (var numStr in allJobNumbers)
+                {
+                    if (int.TryParse(numStr, out int num))
+                    {
+                        if (num > maxNumber) maxNumber = num;
+                    }
+                }
+                return (maxNumber + 1).ToString();
+            }
+            catch
+            {
+                return "1";
+            }
         }
 
         public async Task AddJobAsync(JobModel newJob)
         {
-            using var transaction = await _context.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable);
+            using var transaction = await _context.Database.BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted);
 
             try
             {
-                // --- A. İş Numarası Verme Mantığı (AYNI KALIYOR) ---
+                // 1. İş Numarası Verme (AYNI)
                 var allJobs = await _context.Jobs.Select(j => j.JobNumber).ToListAsync();
                 int maxNumber = 0;
                 if (allJobs.Any())
@@ -190,27 +246,25 @@ namespace EquipmentTracker.Services.Job
                 }
                 newJob.JobNumber = (maxNumber + 1).ToString();
 
-                // --- B. Veritabanına Kayıt (AYNI KALIYOR) ---
+                // 2. Veritabanına Kayıt (AYNI)
                 _context.Jobs.Add(newJob);
                 await _context.SaveChangesAsync();
 
-                // --- C. KLASÖR OLUŞTURMA (DÜZELTİLEN KISIM) ---
+                // 3. KLASÖR OLUŞTURMA (DÜZELTİLDİ)
                 try
                 {
-                    // 1. Ortak yolu çek (Örn: \\192.168.1.66\TrackerDatabase)
-                    string dbPath = await GetGlobalAttachmentPathAsync();
+                    // BU METOT ZATEN ".../Attachments" DÖNDÜRÜYOR
+                    string baseAttachmentPath = await GetGlobalAttachmentPathAsync();
 
-                    // 2. Alt klasör "Attachments" ekle
-                    string baseAttachmentPath = Path.Combine(dbPath, "Attachments");
+                    // HATA BURADAYDI: Aşağıdaki satırı SİLDİK.
+                    // string finalPath = Path.Combine(baseAttachmentPath, "Attachments"); <-- BU YANLIŞTI
 
-                    // 3. İş Klasörü Adını Oluştur (Örn: 101_IsAdi)
                     string safeJobName = SanitizeFolderName(newJob.JobName);
                     string jobFolder = $"{newJob.JobNumber}_{safeJobName}";
 
-                    // 4. Tam Hedef Yolu
+                    // DOĞRUSU: Direkt gelen yolun altına iş klasörünü aç
                     string targetDirectory = Path.Combine(baseAttachmentPath, jobFolder);
 
-                    // 5. Klasörü Oluştur (Erişim izni varsa sunucuda oluşur)
                     if (!Directory.Exists(targetDirectory))
                     {
                         Directory.CreateDirectory(targetDirectory);
@@ -218,8 +272,6 @@ namespace EquipmentTracker.Services.Job
                 }
                 catch (Exception ex)
                 {
-                    // Klasör oluşturulamazsa (erişim hatası vb.) iş kaydını iptal etme, 
-                    // sadece logla. Kullanıcı daha sonra dosya eklerken klasör tekrar oluşturulur.
                     System.Diagnostics.Debug.WriteLine($"Job klasörü oluşturulamadı: {ex.Message}");
                 }
 

@@ -37,7 +37,7 @@ namespace EquipmentTracker.Services.EquipmentService
         // 2. Ana Metot (Ağ Yolu Entegrasyonu Yapıldı)
         public async Task<Equipment> AddEquipmentAsync(JobModel parentJob, Equipment newEquipment)
         {
-            using var transaction = await _context.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable);
+            using var transaction = await _context.Database.BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted);
 
             try
             {

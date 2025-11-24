@@ -1,5 +1,6 @@
-﻿using Microsoft.EntityFrameworkCore;
-using EquipmentTracker.Models;
+﻿using EquipmentTracker.Models;
+using Microsoft.Data.SqlClient;
+using Microsoft.EntityFrameworkCore;
 
 namespace EquipmentTracker.Data
 {
@@ -12,7 +13,7 @@ namespace EquipmentTracker.Data
         public DbSet<EquipmentPartAttachment> EquipmentPartAttachments { get; set; }
 
         // YENİ: Kullanıcılar tablosu
-        public DbSet<User> Users { get; set; }
+        public DbSet<Users> Users { get; set; }
         public DbSet<AppSetting> AppSettings { get; set; }
 
         public DataContext(DbContextOptions<DataContext> options) : base(options)
@@ -52,8 +53,8 @@ namespace EquipmentTracker.Data
                 .OnDelete(DeleteBehavior.Cascade);
 
             // Varsayılan bir Admin kullanıcısı ekleyebiliriz (Opsiyonel)
-            modelBuilder.Entity<User>().HasData(
-                new User { Id = 1, Username = "admin", Password = "123", FullName = "Sistem Yöneticisi", IsAdmin = true }
+            modelBuilder.Entity<Users>().HasData(
+                new Users { Id = 1, Username = "admin", Password = "123", FullName = "Sistem Yöneticisi", IsAdmin = true }
             );
             modelBuilder.Entity<EquipmentAttachment>().Ignore(e => e.IsProcessing);
             modelBuilder.Entity<EquipmentAttachment>().Ignore(e => e.ProcessingProgress);
@@ -65,23 +66,24 @@ namespace EquipmentTracker.Data
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
-            // Tercihlerden ayarları oku
-            string serverIp = Preferences.Get("ServerIP", "192.168.1.20");
-            string dbUser = Preferences.Get("DbUser", "tracker_user");
-            string dbPass = Preferences.Get("DbPassword", "123456");
-
-            // GÜVENLİ BAĞLANTI DİZESİ (Timeout Eklendi)
-            var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder
+            if (!optionsBuilder.IsConfigured)
             {
-                DataSource = serverIp,
-                InitialCatalog = "TrackerDB",
-                UserID = dbUser,
-                Password = dbPass,
-                TrustServerCertificate = true,
-                ConnectTimeout = 5 // <-- KRİTİK: 5 saniye içinde bağlanamazsa hata fırlat
-            };
+                string serverIp = Preferences.Get("ServerIP", "192.168.1.20");
+                string dbUser = Preferences.Get("DbUser", "tracker_user");
+                string dbPass = Preferences.Get("DbPassword", "123456");
 
-            optionsBuilder.UseSqlServer(builder.ConnectionString);
+                var builder = new SqlConnectionStringBuilder
+                {
+                    DataSource = serverIp,
+                    InitialCatalog = "TrackerDB",
+                    UserID = dbUser,
+                    Password = dbPass,
+                    TrustServerCertificate = true,
+                    ConnectTimeout = 5
+                };
+
+                optionsBuilder.UseSqlServer(builder.ConnectionString);
+            }
         }
 
 

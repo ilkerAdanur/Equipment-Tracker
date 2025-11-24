@@ -833,5 +833,33 @@ namespace EquipmentTracker.ViewModels
                 IsBusy = false;
             }
         }
+
+
+        [RelayCommand]
+        async Task OpenFile(string filePath)
+        {
+            if (string.IsNullOrWhiteSpace(filePath)) return;
+
+            try
+            {
+                // Dosya yolunu kontrol et
+                if (!File.Exists(filePath))
+                {
+                    await Application.Current.MainPage.DisplayAlert("Hata", "Dosya bulunamadı veya erişilemiyor.", "Tamam");
+                    return;
+                }
+
+                // Dosyayı varsayılan programla aç (AutoCAD, Viewer vb.)
+                await Launcher.OpenAsync(new OpenFileRequest
+                {
+                    File = new ReadOnlyFile(filePath)
+                });
+            }
+            catch (Exception ex)
+            {
+                await Application.Current.MainPage.DisplayAlert("Hata", $"Dosya açılamadı: {ex.Message}", "Tamam");
+            }
+        }
+
     }
 }

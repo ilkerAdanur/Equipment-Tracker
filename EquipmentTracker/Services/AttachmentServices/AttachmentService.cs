@@ -60,27 +60,28 @@ namespace EquipmentTracker.Services.AttachmentServices
 
                 try
                 {
-                    // --- DÜZELTME BURADA ---
-                    // Eski kod: string imagesFolder = GetImagesFolderPath();
-                    // Yeni kod: Kaynak dosya (DWG) neredeysese, resim de oraya (Sunucuya) gitsin.
+                    // Resmi DWG'nin olduğu yere (Sunucuya) kaydet
                     string imagesFolder = Path.GetDirectoryName(sourceDwgPath);
-
                     string targetThumbPath = Path.Combine(imagesFolder, targetThumbName);
 
-                    // 2. İlerleme Simülasyonu
+                    // İlerleme Simülasyonu
                     var progressSimulator = Task.Run(async () =>
                     {
-                        while (attachment.ProcessingProgress < 0.8 && attachment.IsProcessing)
+                        // IsProcessing false olana kadar veya %80'e gelene kadar
+                        while (attachment.IsProcessing && attachment.ProcessingProgress < 0.8)
                         {
-                            await Task.Delay(100);
+                            // DEĞİŞİKLİK: 100ms yerine 300ms bekletiyoruz.
+                            await Task.Delay(300);
+
                             MainThread.BeginInvokeOnMainThread(() =>
                             {
-                                attachment.ProcessingProgress += 0.05;
+                                // Daha büyük adımlarla ilerle
+                                attachment.ProcessingProgress += 0.1;
                             });
                         }
                     });
 
-                    // 3. ASIL İŞLEM (Resim Oluşturma - Sunucuya Yazar)
+                    // ASIL İŞLEM (Resim Oluşturma)
                     await Task.Run(() =>
                     {
                         using (Aspose.CAD.Image cadImage = Aspose.CAD.Image.Load(sourceDwgPath))
@@ -94,13 +95,11 @@ namespace EquipmentTracker.Services.AttachmentServices
                                 DrawType = Aspose.CAD.FileFormats.Cad.CadDrawTypeMode.UseObjectColor
                             };
                             var options = new PngOptions { VectorRasterizationOptions = rasterizationOptions };
-
-                            // Sunucuya kaydeder
                             cadImage.Save(targetThumbPath, options);
                         }
                     });
 
-                    // 4. Veritabanı Kaydı (Yol sunucu yolu olarak güncellenir)
+                    // Veritabanı Güncelleme
                     var dbAttachment = await dbContext.EquipmentAttachments.FindAsync(attachment.Id);
                     if (dbAttachment != null)
                     {
@@ -108,15 +107,19 @@ namespace EquipmentTracker.Services.AttachmentServices
                         await dbContext.SaveChangesAsync();
                     }
 
-                    // 5. UI Güncelleme
+                    // --- KRİTİK UI GÜNCELLEME SIRASI ---
+
+                    // 1. Önce yolu ata (Hala "Yükleniyor" modundayız, bar görünür)
                     MainThread.BeginInvokeOnMainThread(() =>
                     {
                         attachment.ProcessingProgress = 1.0;
-                        attachment.ThumbnailPath = targetThumbPath;
+                        attachment.ThumbnailPath = targetThumbPath; // Image kontrolü yüklemeye başlar
                     });
 
+                    // 2. Kısa bir süre bekle (UI render etsin)
                     await Task.Delay(500);
 
+                    // 3. Şimdi barı kapat, resim zaten arkada hazırdı, anında görünür.
                     MainThread.BeginInvokeOnMainThread(() =>
                     {
                         attachment.IsProcessing = false;
@@ -125,13 +128,11 @@ namespace EquipmentTracker.Services.AttachmentServices
                 catch (Exception ex)
                 {
                     System.Diagnostics.Debug.WriteLine($"Thumbnail hatası: {ex.Message}");
-                    MainThread.BeginInvokeOnMainThread(() =>
-                    {
-                        attachment.IsProcessing = false;
-                    });
+                    MainThread.BeginInvokeOnMainThread(() => attachment.IsProcessing = false);
                 }
             }
         }
+
         public async Task<EquipmentAttachment> AddAttachmentAsync(JobModel parentJob, Equipment parentEquipment, FileResult fileToCopy)
         {
             // 1. ADIM: Ortak Yolu (Veritabanından) Belirle
