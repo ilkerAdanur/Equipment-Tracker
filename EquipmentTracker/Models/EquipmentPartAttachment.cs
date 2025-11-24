@@ -1,28 +1,33 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
-using System.Threading.Tasks;
 
 namespace EquipmentTracker.Models
 {
-    public class EquipmentPartAttachment
+    // ObservableObject eklendi ve partial yapıldı
+    public partial class EquipmentPartAttachment : ObservableObject
     {
         public int Id { get; set; }
-
-
         public string FileName { get; set; }
-
-
         public string FilePath { get; set; }
-        /// <summary>
-        /// Varsa, bu dosyanın küçük resminin (.png) diskteki yolu.
-        /// </summary>
-        public string ThumbnailPath { get; set; }
+
+        // Resim yolu değiştiğinde arayüzü uyarmak için ObservableProperty
+        [ObservableProperty]
+        private string? _thumbnailPath;
 
         public int EquipmentPartId { get; set; }
+
         [JsonIgnore]
         public EquipmentPart EquipmentPart { get; set; }
+
+        // --- YENİ EKLENEN UI ÖZELLİKLERİ (Veritabanına Kaydedilmez) ---
+
+        [NotMapped]
+        [ObservableProperty]
+        private bool _isProcessing; // İşlem devam ediyor mu?
+
+        [NotMapped]
+        [ObservableProperty]
+        private double _processingProgress; // 0.0 ile 1.0 arası
     }
 }

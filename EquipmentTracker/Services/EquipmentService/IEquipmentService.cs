@@ -12,5 +12,6 @@ namespace EquipmentTracker.Services.EquipmentService
         Task<Equipment> AddEquipmentAsync(JobModel parentJob, Equipment newEquipment);
         Task<(string nextEquipId, string nextEquipCode)> GetNextEquipmentIdsAsync(JobModel parentJob);
         Task DeleteEquipmentAsync(int equipmentId);
+        Task ToggleEquipmentStatusAsync(int equipmentId, bool isCancelled);
     }
 }

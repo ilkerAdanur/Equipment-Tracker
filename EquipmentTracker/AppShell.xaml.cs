@@ -12,7 +12,7 @@ namespace EquipmentTracker
             // Yeni rotaları (sayfaları) sisteme tanıt
             Routing.RegisterRoute(nameof(JobDetailsPage), typeof(JobDetailsPage));
             Routing.RegisterRoute(nameof(AddNewJobPage), typeof(AddNewJobPage));
-            Routing.RegisterRoute(nameof(SettingsPage), typeof(SettingsPage));
+            Routing.RegisterRoute(nameof(SettingsPage), typeof(SettingsPage)); // <-- YENİ EKLEYİN
 
         }
         

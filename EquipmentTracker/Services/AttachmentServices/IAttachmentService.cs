@@ -12,5 +12,6 @@ namespace EquipmentTracker.Services.AttachmentServices
         Task<EquipmentAttachment> AddAttachmentAsync(JobModel parentJob, Equipment parentEquipment, FileResult fileToCopy);
         Task OpenAttachmentAsync(EquipmentAttachment attachment);
         Task DeleteAttachmentAsync(EquipmentAttachment attachment);
+        Task DeleteAttachmentRecordAsync(int attachmentId);
     }
 }

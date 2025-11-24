@@ -16,9 +16,7 @@ namespace EquipmentTracker.ViewModels
         [ObservableProperty] string _jobName;
         [ObservableProperty] string _jobOwner;
         [ObservableProperty] DateTime _date = DateTime.Now; // Varsayılan tarih
-        
-        [ObservableProperty] string _creatorName;
-        [ObservableProperty] string _creatorRole;
+
         [ObservableProperty] string _jobDescription;
 
         public AddNewJobViewModel(IJobService jobService)
@@ -35,15 +33,6 @@ namespace EquipmentTracker.ViewModels
             IsBusy = true;
             try
             {
-                // --- YENİ KONTROL ---
-                // Veritabanı daha önce hazırlanmadıysa, şimdi hazırla.
-                if (!MauiProgram.IsDatabaseInitialized)
-                {
-                    await _jobService.InitializeDatabaseAsync();
-                    MauiProgram.IsDatabaseInitialized = true; // Hazırlandı olarak işaretle
-                }
-                // --- KONTROL SONU ---
-
                 JobNumber = await _jobService.GetNextJobNumberAsync();
             }
             finally
@@ -56,7 +45,7 @@ namespace EquipmentTracker.ViewModels
         [RelayCommand]
         async Task SaveJob()
         {
-            if (string.IsNullOrWhiteSpace(JobName) || string.IsNullOrWhiteSpace(JobOwner) || string.IsNullOrWhiteSpace(CreatorName))
+            if (string.IsNullOrWhiteSpace(JobName) || string.IsNullOrWhiteSpace(JobOwner) )
             {
                 await Shell.Current.DisplayAlert("Hata", "İş Adı, İş Sahibi ve Ekleyen Adı boş olamaz.", "Tamam");
                 return;
@@ -70,8 +59,6 @@ namespace EquipmentTracker.ViewModels
                 Date = this.Date,
 
                 // --- YENİ VERİLER ---
-                CreatorName = this.CreatorName,
-                CreatorRole = this.CreatorRole,
                 JobDescription = this.JobDescription,
                 // MainApproval "Pending" olarak varsayılan gelir (Model'in constructor'ından)
 

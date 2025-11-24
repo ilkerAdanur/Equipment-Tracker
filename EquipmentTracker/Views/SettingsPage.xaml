@@ -2,39 +2,132 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:vm="clr-namespace:EquipmentTracker.ViewModels"
+             xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
              x:Class="EquipmentTracker.Views.SettingsPage"
              x:DataType="vm:SettingsViewModel"
              Title="{Binding Title}"
              BackgroundColor="White">
 
+    <ContentPage.Resources>
+        <toolkit:InvertedBoolConverter x:Key="InvertedBoolConverter" />
+    </ContentPage.Resources>
+
     <ScrollView>
-        <VerticalStackLayout HorizontalOptions="Center" Padding="10" Spacing="10">
+        <VerticalStackLayout HorizontalOptions="Center" Padding="0,10,0,0" Spacing="15" >
 
-            <Frame BorderColor="White" Padding="10" Margin="0,0,0,10" WidthRequest="500">
-                <VerticalStackLayout Spacing="5">
-                    <Label Text="Dosya Depolama Yolu" FontSize="Caption" FontAttributes="Bold" TextColor="Black"/>
-                    <Label Text="Tüm PDF/DWG dosyaları bu klasörün içindeki 'Attachments' alt klasörüne kaydedilecektir." FontSize="Micro" TextColor="Gray"/>
+            <Frame BorderColor="{Binding StatusColor}" BackgroundColor="#F5F5F5" Padding="15"  HorizontalOptions="Center">
+                <Label Text="{Binding StatusText}" 
+                       TextColor="{Binding StatusColor}" 
+                       FontSize="Large" 
+                       FontAttributes="Bold" 
+                       HorizontalOptions="Center"/>
+            </Frame>
 
-                    <Grid ColumnDefinitions="*, Auto" ColumnSpacing="5">
-                        <Entry Grid.Column="0"
-                               Text="{Binding AttachmentPath}" 
-                               FontSize="Small"
-                               Placeholder="Örn: C:\Users\Kullanici\Belgelerim\TrackerDatabase"/>
-                        <Button Grid.Column="1"
-                                Text="Gözat..."
-                                Command="{Binding SelectAttachmentPathCommand}"
-                                FontSize="Small"
-                                WidthRequest="80"
-                                HeightRequest="35"/>
-                    </Grid>
+            <Frame BorderColor="Gray" Padding="15" WidthRequest="500" >
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="Veritabanı Giriş Bilgileri" FontSize="Medium" FontAttributes="Bold" TextColor="Black"/>
 
-                    <Button Text="Bu Yolu Kaydet" 
-                            Command="{Binding SaveAttachmentPathCommand}" 
-                            FontSize="Small" 
-                            HeightRequest="35"/>
+                    <VerticalStackLayout>
+                        <Label Text="Sunucu IP:" TextColor="Gray" FontSize="Micro"/>
+                        <Entry Text="{Binding ServerIp}" 
+                               IsEnabled="{Binding IsInputsEnabled}"
+                               Placeholder="192.168.1.20" 
+                               TextColor="White"
+                               BackgroundColor="{Binding IsInputsEnabled, Converter={toolkit:BoolToObjectConverter TrueObject=Transparent, FalseObject=#EEEEEE}}"/>
+                    </VerticalStackLayout>
+
+                    <VerticalStackLayout>
+                        <Label Text="Kullanıcı Adı:" TextColor="Gray" FontSize="Micro"/>
+                        <Entry Text="{Binding DbUser}" 
+                               IsEnabled="{Binding IsInputsEnabled}"
+                               Placeholder="tracker_user" 
+                               TextColor="White"
+                               BackgroundColor="{Binding IsInputsEnabled, Converter={toolkit:BoolToObjectConverter TrueObject=Transparent, FalseObject=#EEEEEE}}"/>
+                    </VerticalStackLayout>
+
+                    <VerticalStackLayout>
+                        <Label Text="Şifre:" TextColor="Gray" FontSize="Micro"/>
+                        <Entry Text="{Binding DbPassword}" 
+                               IsEnabled="{Binding IsInputsEnabled}"
+                               IsPassword="True" 
+                               TextColor="White"
+                               BackgroundColor="{Binding IsInputsEnabled, Converter={toolkit:BoolToObjectConverter TrueObject=Transparent, FalseObject=#EEEEEE}}"/>
+                    </VerticalStackLayout>
+
+                    <Button Text="KAYDET VE BAĞLAN" 
+                            Command="{Binding SaveServerIpCommand}" 
+                            IsVisible="{Binding IsConnected, Converter={StaticResource InvertedBoolConverter}}"
+                            BackgroundColor="#2196F3"
+                            FontAttributes="Bold"
+                            HeightRequest="45"/>
+
+                    <Button Text="BAĞLANTIYI KES" 
+                            Command="{Binding DisconnectCommand}" 
+                            IsVisible="{Binding IsConnected}"
+                            BackgroundColor="#D32F2F"
+                            FontAttributes="Bold"
+                            HorizontalOptions="Center"
+                            HeightRequest="45"/>
+
+                    <Label Text="Not: Bağlantı sonrası yeniden başlatın" 
+                           IsVisible="{Binding IsConnected}"
+                           TextColor="Gray" 
+                           FontSize="Micro" 
+                           HorizontalOptions="Center"/>
+
                 </VerticalStackLayout>
             </Frame>
 
+            <Frame BorderColor="Gray" 
+                   Padding="15" 
+                   WidthRequest="500" 
+                   IsVisible="{Binding IsAdminUser}">
+
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="Dosya Depolama Ayarları" FontSize="Medium" FontAttributes="Bold" TextColor="Black"/>
+
+                    <VerticalStackLayout>
+                        <Label Text="TrackerDatabase Konumu:" TextColor="Gray" FontSize="Micro"/>
+                        <Grid ColumnDefinitions="*, Auto" ColumnSpacing="5">
+                            <Entry Grid.Column="0" 
+                                   Text="{Binding AttachmentPath}" 
+                                   Placeholder="Varsayılan konum..." 
+                                   TextColor="Black"
+                                   BackgroundColor="#F5F5F5"/>
+
+                            <Button Grid.Column="1" 
+                                    Text="📂" 
+                                    Command="{Binding SelectAttachmentPathCommand}" 
+                                    BackgroundColor="Gray" 
+                                    TextColor="White"
+                                    WidthRequest="50"
+                                    Padding="0"/>
+                        </Grid>
+                    </VerticalStackLayout>
+
+                    <Button Text="KONUMU KAYDET" 
+                            Command="{Binding SaveAttachmentPathCommand}" 
+                            BackgroundColor="#2196F3" 
+                            FontAttributes="Bold" 
+                            HeightRequest="45"/>
+
+                    <Label Text="Not: Seçilen klasörün içine 'TrackerDatabase' klasörü oluşturulacaktır." 
+                           TextColor="Gray" 
+                           FontSize="Micro" 
+                           HorizontalOptions="Center"
+                           HorizontalTextAlignment="Center"/>
+                </VerticalStackLayout>
+            </Frame>
+
+            <Button Text="OTURUMU KAPAT" 
+        Command="{Binding LogoutCommand}" 
+        BackgroundColor="Red"
+        TextColor="White"
+        Margin="0,0,0,200"
+        HeightRequest="45"
+        IsVisible="{Binding IsAdminUser}"
+                    WidthRequest="350"
+            />
         </VerticalStackLayout>
     </ScrollView>
 </ContentPage>

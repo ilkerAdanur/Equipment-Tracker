@@ -2,6 +2,8 @@
 using EquipmentTracker.Data;
 using EquipmentTracker.Models;
 using Microsoft.EntityFrameworkCore;
+using System.Diagnostics;
+using System.Text.RegularExpressions;
 
 namespace EquipmentTracker.Services.EquipmentService
 {
@@ -13,34 +15,127 @@ namespace EquipmentTracker.Services.EquipmentService
         {
             _context = context;
         }
+        private string GetCurrentAttachmentPath()
+        {
+            string defaultPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TrackerDatabase");
+            string basePath = Preferences.Get("attachment_path", defaultPath);
+            return Path.Combine(basePath, "Attachments");
+        }
+
+        private static string SanitizeFolderName(string folderName)
+        {
+            if (string.IsNullOrEmpty(folderName))
+                return string.Empty;
+
+            string sanitizedName = Regex.Replace(folderName, @"[\\/:*?""<>| ]", "_");
+            sanitizedName = Regex.Replace(sanitizedName, @"_+", "_");
+            return sanitizedName.Trim('_');
+        }
 
         public async Task<Equipment> AddEquipmentAsync(JobModel parentJob, Equipment newEquipment)
         {
-            newEquipment.JobId = parentJob.Id; // Foreign key'i (ilişkiyi) ayarla
-            _context.Equipments.Add(newEquipment);
-            await _context.SaveChangesAsync();
+            using var transaction = await _context.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable);
 
-            _context.Entry(newEquipment).State = EntityState.Detached;
+            try
+            {
+                // 1. Bu işe ait en son ekipman ID'sini bul
+                var allEquipmentIds = await _context.Equipments
+                    .Where(e => e.JobId == parentJob.Id)
+                    .Select(e => e.EquipmentId)
+                    .ToListAsync();
 
-            return newEquipment;
+                int maxId = 0;
+                foreach (var idStr in allEquipmentIds)
+                {
+                    if (int.TryParse(idStr, out int id))
+                    {
+                        if (id > maxId) maxId = id;
+                    }
+                }
+                int nextId = maxId + 1;
+
+                // 2. Yeni numaraları ata
+                newEquipment.EquipmentId = nextId.ToString();
+                newEquipment.EquipmentCode = $"{parentJob.JobNumber}.{nextId}";
+                newEquipment.JobId = parentJob.Id;
+
+                // 3. Kaydet
+                _context.Equipments.Add(newEquipment);
+                await _context.SaveChangesAsync();
+
+                // Entity takibini bırak (UI sorunlarını önlemek için)
+                _context.Entry(newEquipment).State = EntityState.Detached;
+
+                // 4. Klasör Oluşturma
+                try
+                {
+                    string baseAttachmentPath = GetCurrentAttachmentPath();
+                    string safeJobName = SanitizeFolderName(parentJob.JobName);
+                    string jobFolder = $"{parentJob.JobNumber}_{safeJobName}";
+                    string safeEquipName = SanitizeFolderName(newEquipment.Name);
+                    string equipFolder = $"{parentJob.JobNumber}_{newEquipment.EquipmentId}_{safeEquipName}";
+
+                    string targetDirectory = Path.Combine(baseAttachmentPath, jobFolder, equipFolder);
+
+                    if (!Directory.Exists(targetDirectory))
+                    {
+                        Directory.CreateDirectory(targetDirectory);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Equipment klasörü hatası: {ex.Message}");
+                }
+
+                await transaction.CommitAsync();
+                return newEquipment;
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
         }
+
+        public async Task ToggleEquipmentStatusAsync(int equipmentId, bool isCancelled)
+        {
+            var equipment = await _context.Equipments.FindAsync(equipmentId);
+            if (equipment != null)
+            {
+                equipment.IsCancelled = isCancelled;
+                await _context.SaveChangesAsync();
+                _context.Entry(equipment).State = EntityState.Detached;
+            }
+        }
+
         public async Task<(string nextEquipId, string nextEquipCode)> GetNextEquipmentIdsAsync(JobModel parentJob)
         {
             string jobNum = parentJob.JobNumber;
 
-            var lastEquipment = await _context.Equipments
+            // 1. Bu işe ait tüm ekipman ID'lerini çek
+            // (SQL tarafında string sıralaması "10", "2"den önce geldiği için hatalı çalışır,
+            // bu yüzden hepsini çekip C# tarafında sayıya çevirip sıralayacağız.)
+            var allEquipmentIds = await _context.Equipments
                 .Where(e => e.JobId == parentJob.Id)
-                .OrderByDescending(e => e.EquipmentId) 
-                .FirstOrDefaultAsync();
+                .Select(e => e.EquipmentId)
+                .ToListAsync();
 
-            int nextId = 1;
-            if (lastEquipment != null && int.TryParse(lastEquipment.EquipmentId, out int lastId))
+            int maxId = 0;
+
+            // 2. Bellekte integer'a çevirip en büyüğünü bul
+            foreach (var idStr in allEquipmentIds)
             {
-                nextId = lastId + 1;
+                if (int.TryParse(idStr, out int id))
+                {
+                    if (id > maxId) maxId = id;
+                }
             }
 
-            string nextEquipId = nextId.ToString("D3"); 
-            string nextEquipCode = $"{jobNum}.{nextEquipId}"; 
+            // 3. Bir fazlasını al
+            int nextId = maxId + 1;
+
+            string nextEquipId = nextId.ToString();
+            string nextEquipCode = $"{jobNum}.{nextEquipId}";
 
             return (nextEquipId, nextEquipCode);
         }

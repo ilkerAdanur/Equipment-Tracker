@@ -1,4 +1,7 @@
 ﻿// Dosya: ViewModels/JobDetailsViewModel.cs
+using CommunityToolkit.Maui.Alerts;
+using CommunityToolkit.Maui.Core;
+using CommunityToolkit.Maui.Views;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using EquipmentTracker.Models;
@@ -8,8 +11,12 @@ using EquipmentTracker.Services.EquipmentPartAttachmentServices;
 using EquipmentTracker.Services.EquipmentPartService;
 using EquipmentTracker.Services.EquipmentService;
 using EquipmentTracker.Services.Job;
+using Microsoft.Maui.ApplicationModel.DataTransfer;
+using MiniExcelLibs;
 using System.Collections.ObjectModel;
 using System.Diagnostics; // Hata ayıklama için
+using System.IO;
+using System.Text.RegularExpressions;
 
 namespace EquipmentTracker.ViewModels
 {
@@ -21,12 +28,14 @@ namespace EquipmentTracker.ViewModels
         private readonly IEquipmentPartService _partService; // Sizin isimlendirmeniz
         private readonly IAttachmentService _attachmentService;
         private readonly IEquipmentPartAttachmentService _equipmentPartAttachmentService;
-
+        public ObservableCollection<EquipmentDisplayViewModel> DisplayEquipments { get; set; } = new();
         [ObservableProperty]
         JobModel _currentJob;
 
+
         [ObservableProperty]
         int _jobId;
+
 
         // --- YENİ ONAY DURUMU ÖZELLİKLERİ ---
         [ObservableProperty]
@@ -37,6 +46,15 @@ namespace EquipmentTracker.ViewModels
 
         [ObservableProperty]
         bool _isRejected; // Reddedildiyse
+
+        [ObservableProperty]
+        CopyableTextViewModel jobNameDisplay;
+
+        [ObservableProperty]
+        CopyableTextViewModel jobOwnerDisplay;
+
+        [ObservableProperty]
+        CopyableTextViewModel jobDescriptionDisplay;
 
         // Constructor (Sizin 5 servisinizi de alıyor)
         public JobDetailsViewModel(IJobService jobService,
@@ -52,27 +70,86 @@ namespace EquipmentTracker.ViewModels
             _equipmentPartAttachmentService = equipmentPartAttachmentService;
             Title = "İş Detayı";
         }
-
+        [RelayCommand]
+        async Task GoToHome()
+        {
+            await Shell.Current.GoToAsync("..");
+        }
         partial void OnJobIdChanged(int value)
         {
             LoadJobDetailsCommand.Execute(value);
         }
+        [RelayCommand]
+        async Task CopyToClipboard(object textToCopyObj)
+        {
+            if (textToCopyObj == null)
+                return;
+
+            string? textToCopy = string.Empty;
+
+            // Gelen verinin tipini kontrol et
+            if (textToCopyObj is DateTime dateTime)
+            {
+                // Tarihi istediğimiz formatta string'e çevir
+                textToCopy = dateTime.ToString("dd.MM.yyyy");
+            }
+            else
+            {
+                // Diğer her şeyi string olarak kabul et
+                textToCopy = textToCopyObj.ToString();
+            }
+
+            if (string.IsNullOrEmpty(textToCopy))
+                return;
+
+            await Clipboard.SetTextAsync(textToCopy);
+
+            var popup = new Popup
+            {
+                Content = new VerticalStackLayout
+                {
+                    Padding = 10,
+                    BackgroundColor = Colors.Black.WithAlpha(0.8f),
+                    Children =
+            {
+                new Label
+                {
+                    Text = "Kopyalandı ✔️",
+                    TextColor = Colors.White,
+                    FontSize = 16,
+                    HorizontalOptions = LayoutOptions.Center
+                }
+            }
+                }
+            };
+
+            Application.Current.MainPage.ShowPopup(popup);
+
+            await Task.Delay(1500);
+            popup.Close();
+        }
 
         [RelayCommand]
-        async Task LoadJobDetailsAsync(int jobId)
+        public async Task LoadJobDetailsAsync(int jobId)
         {
             if (jobId == 0) return;
             if (IsBusy) return;
-            IsBusy = true;
             try
             {
+                IsBusy = true;
                 CurrentJob = await _jobService.GetJobByIdAsync(jobId);
 
                 if (CurrentJob != null)
                 {
-                    Title = CurrentJob.JobName;
+                    await CheckAttachmentsIntegrityAsync();
+                    //Title = CurrentJob.JobName;
+                    JobNameDisplay = new CopyableTextViewModel(CurrentJob.JobName);
+                    JobOwnerDisplay = new CopyableTextViewModel(CurrentJob.JobOwner);
+                    JobDescriptionDisplay = new CopyableTextViewModel(CurrentJob.JobDescription);
+
                     // Onay durumuna göre arayüzü kontrol edecek bool'ları ayarla
                     UpdateApprovalStatus();
+
                 }
                 else
                 {
@@ -159,6 +236,10 @@ namespace EquipmentTracker.ViewModels
                 if (savedEquipment != null)
                 {
                     CurrentJob.Equipments.Add(savedEquipment);
+
+                    // --- YENİ EKLENEN KISIM: EXCEL'İ OTOMATİK GÜNCELLE ---
+                    await SaveExcelToDiskAsync();
+                    // ----------------------------------------------------
                 }
             }
             catch (Exception ex)
@@ -170,7 +251,6 @@ namespace EquipmentTracker.ViewModels
                 IsBusy = false;
             }
         }
-
         [RelayCommand]
         private async Task AddNewPart(Equipment parentEquipment)
         {
@@ -471,6 +551,282 @@ namespace EquipmentTracker.ViewModels
                         break;
                     }
                 }
+            }
+            finally
+            {
+                IsBusy = false;
+            }
+        }
+
+        [ObservableProperty]
+        bool isEditing = false;
+
+        // --- GÜNCELLEME KOMUTU ---
+        [RelayCommand]
+        async Task UpdateJob()
+        {
+            if (CurrentJob == null) return;
+
+            if (IsBusy) return;
+            IsBusy = true;
+
+            try
+            {
+                // GÜNCELLEME: ID kontrolü ve Servis çağrısı
+                // CurrentJob, UI'dan gelen güncel verileri tutar.
+                await _jobService.UpdateJob(CurrentJob.Id, CurrentJob);
+
+                await Shell.Current.DisplayAlert("Başarılı", "İş detayları güncellendi.", "Tamam");
+            }
+            catch (Exception ex)
+            {
+                await Shell.Current.DisplayAlert("Hata", $"Güncelleme sırasında hata oluştu: {ex.Message}", "Tamam");
+            }
+            finally
+            {
+                IsBusy = false;
+            }
+        }
+
+        private async Task CheckAttachmentsIntegrityAsync()
+        {
+            // Dosya yolu kontrolü (Gerekirse)
+            string basePath = Preferences.Get("attachment_path", string.Empty);
+            if (string.IsNullOrWhiteSpace(basePath)) return;
+
+            // 1. Ekipman Dosyaları Kontrolü
+            foreach (var equipment in CurrentJob.Equipments)
+            {
+                for (int i = equipment.Attachments.Count - 1; i >= 0; i--)
+                {
+                    var attachment = equipment.Attachments.ElementAt(i);
+
+                    // DÜZELTME: FileName ile yol uydurmak yerine, veritabanındaki kayıtlı tam yolu (FilePath) kullanıyoruz.
+                    if (!File.Exists(attachment.FilePath))
+                    {
+                        // Dosya gerçekten yoksa kaydı sil
+                        await _attachmentService.DeleteAttachmentRecordAsync(attachment.Id);
+                        equipment.Attachments.RemoveAt(i);
+                    }
+                }
+
+                // 2. Parça Dosyaları Kontrolü
+                foreach (var part in equipment.Parts)
+                {
+                    for (int i = part.Attachments.Count - 1; i >= 0; i--)
+                    {
+                        var attachment = part.Attachments.ElementAt(i);
+
+                        // DÜZELTME: Burada da FilePath kullanıyoruz.
+                        if (!File.Exists(attachment.FilePath))
+                        {
+                            await _equipmentPartAttachmentService.DeletePartAttachmentRecordAsync(attachment.Id);
+                            part.Attachments.RemoveAt(i);
+                        }
+                    }
+                }
+            }
+        }
+
+        [RelayCommand]
+        async Task CreateExcelReport()
+        {
+            if (CurrentJob == null) return;
+            if (IsBusy) return;
+            IsBusy = true;
+
+            try
+            {
+                // 1. Klasör Yolunu Bul
+                string baseAttachmentPath = Preferences.Get("attachment_path", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TrackerDatabase"));
+                baseAttachmentPath = Path.Combine(baseAttachmentPath, "Attachments");
+
+                // İsim temizleme (JobService'deki metodun aynısını burada kullanıyoruz veya helper yapabiliriz)
+                string safeJobName = Regex.Replace(CurrentJob.JobName, @"[\\/:*?""<>| ]", "_");
+                safeJobName = Regex.Replace(safeJobName, @"_+", "_").Trim('_');
+
+                string jobFolder = $"{CurrentJob.JobNumber}_{safeJobName}";
+                string directoryPath = Path.Combine(baseAttachmentPath, jobFolder);
+
+                // Klasör yoksa oluştur
+                if (!Directory.Exists(directoryPath))
+                {
+                    Directory.CreateDirectory(directoryPath);
+                }
+
+                // 2. Dosya Adını Oluştur (Örn: 3_Aşkale.xlsx)
+                string fileName = $"{CurrentJob.JobNumber}_{safeJobName}.xlsx";
+                string filePath = Path.Combine(directoryPath, fileName);
+
+                // 3. Veriyi Hazırla
+                // Sadece Excel'e basılacak basit bir liste oluşturuyoruz
+                var excelData = CurrentJob.Equipments.Select(e => new
+                {
+                    EkipmanNo = e.EquipmentCode, // Örn: 3.1
+                    EkipmanAdi = e.Name,         // Örn: Dozaj Pompası
+                    ParcaSayisi = e.Parts.Count,
+                    DosyaSayisi = e.Attachments.Count
+                });
+
+                // 4. Excel'i Kaydet (MiniExcel ile çok basit)
+                await MiniExcel.SaveAsAsync(filePath, excelData);
+
+                // 5. Kullanıcıya Bilgi Ver
+                bool openFile = await Shell.Current.DisplayAlert("Başarılı",
+                    $"Excel dosyası oluşturuldu:\n{fileName}\n\nKlasörde açmak ister misiniz?",
+                    "Evet", "Hayır");
+
+                if (openFile)
+                {
+                    // Dosyayı açmayı dene
+                    await Launcher.Default.OpenAsync(new OpenFileRequest
+                    {
+                        File = new ReadOnlyFile(filePath)
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                await Shell.Current.DisplayAlert("Hata", $"Excel oluşturulurken hata: {ex.Message}", "Tamam");
+            }
+            finally
+            {
+                IsBusy = false;
+            }
+        }
+
+
+        private async Task SaveExcelToDiskAsync()
+        {
+            if (CurrentJob == null) return;
+
+            try
+            {
+                // 1. Veritabanından En Güncel ve Dolu Veriyi Çek (Includes ile)
+                // UI'daki CurrentJob yerine, veritabanından taze kopya alıyoruz.
+                var freshJobData = await _jobService.GetJobByIdAsync(CurrentJob.Id);
+
+                if (freshJobData == null) return;
+
+                // 2. Klasör Yollarını Hazırla
+                string baseAttachmentPath = Preferences.Get("attachment_path", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TrackerDatabase"));
+                baseAttachmentPath = Path.Combine(baseAttachmentPath, "Attachments");
+
+                string safeJobName = Regex.Replace(freshJobData.JobName, @"[\\/:*?""<>| ]", "_");
+                safeJobName = Regex.Replace(safeJobName, @"_+", "_").Trim('_');
+
+                string jobFolder = $"{freshJobData.JobNumber}_{safeJobName}";
+                string directoryPath = Path.Combine(baseAttachmentPath, jobFolder);
+
+                if (!Directory.Exists(directoryPath))
+                {
+                    Directory.CreateDirectory(directoryPath);
+                }
+
+                string fileName = $"{freshJobData.JobNumber}_{safeJobName}.xlsx";
+                string filePath = Path.Combine(directoryPath, fileName);
+
+                // 3. Veriyi Hazırla (freshJobData kullanarak)
+                var excelData = freshJobData.Equipments.Select(e => new
+                {
+                    EkipmanNo = e.EquipmentCode,
+                    EkipmanAdi = e.Name,
+                    // Null kontrolü yaparak sayıları alıyoruz
+                    ParcaSayisi = e.Parts != null ? e.Parts.Count : 0,
+                    DosyaSayisi = (e.Attachments?.Count ?? 0) + (e.Parts?.Sum(p => p.Attachments?.Count ?? 0) ?? 0), // Hem ekipman hem parça dosyalarını topla
+                    EklemeTarihi = DateTime.Now.ToString("dd.MM.yyyy HH:mm")
+                });
+
+                // 4. Kaydet
+                await MiniExcel.SaveAsAsync(filePath, excelData, overwriteFile: true);
+            }
+            catch (IOException)
+            {
+                bool retry = await Shell.Current.DisplayAlert("Uyarı",
+                    "Excel dosyası şu anda açık olduğu için güncellenemiyor.\n\nLütfen Excel'i kapatıp 'Tekrar Dene' butonuna basın.",
+                    "Tekrar Dene", "İptal Et");
+
+                if (retry) await SaveExcelToDiskAsync();
+            }
+            catch (Exception ex)
+            {
+                await Shell.Current.DisplayAlert("Hata", $"Excel hatası: {ex.Message}", "Tamam");
+            }
+        }
+
+        [RelayCommand]
+        async Task OpenExcelFile()
+        {
+            if (CurrentJob == null) return;
+
+            try
+            {
+                // Dosya yolunu tekrar hesapla
+                string baseAttachmentPath = Preferences.Get("attachment_path", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TrackerDatabase"));
+                baseAttachmentPath = Path.Combine(baseAttachmentPath, "Attachments");
+
+                string safeJobName = Regex.Replace(CurrentJob.JobName, @"[\\/:*?""<>| ]", "_");
+                safeJobName = Regex.Replace(safeJobName, @"_+", "_").Trim('_');
+
+                string jobFolder = $"{CurrentJob.JobNumber}_{safeJobName}";
+                string fileName = $"{CurrentJob.JobNumber}_{safeJobName}.xlsx";
+                string filePath = Path.Combine(baseAttachmentPath, jobFolder, fileName);
+
+                // Dosya yoksa (belki hiç ekipman eklenmedi ama butona basıldı), şimdi oluştur
+                if (!File.Exists(filePath))
+                {
+                    await SaveExcelToDiskAsync();
+                }
+
+                // Dosyayı Aç
+                await Launcher.Default.OpenAsync(new OpenFileRequest
+                {
+                    File = new ReadOnlyFile(filePath)
+                });
+            }
+            catch (Exception ex)
+            {
+                await Shell.Current.DisplayAlert("Hata", $"Excel açılırken hata: {ex.Message}", "Tamam");
+            }
+        }
+
+        [RelayCommand]
+        async Task ToggleEquipmentStatus(Equipment equipment)
+        {
+            if (equipment == null) return;
+
+            string actionName = equipment.IsCancelled ? "AKTİF ETMEK" : "İPTAL ETMEK";
+            string msg = equipment.IsCancelled ? "Ekipman tekrar aktif olacak." : "Ekipman iptal edildi olarak işaretlenecek.";
+
+            bool confirmed = await Shell.Current.DisplayAlert("Ekipman Durumu",
+                $"'{equipment.Name}' ekipmanını {actionName} istiyor musunuz?\n{msg}", "Evet", "Vazgeç");
+
+            if (!confirmed) return;
+
+            if (IsBusy) return;
+            IsBusy = true;
+
+            try
+            {
+                // Yeni durum
+                bool newStatus = !equipment.IsCancelled;
+
+                // 1. Veritabanını Güncelle
+                // (ServiceScope kullanmamıza gerek yok çünkü JobDetailsViewModel zaten transient ve her açılışta yenileniyor, 
+                // ancak garanti olsun diye scope kullanabilir veya direkt servisi çağırabilirsiniz. 
+                // Burada scope kullanmak en güvenlisidir.)
+
+                // Eğer _serviceProvider injected değilse (ki constructor'da yoktu), direkt servisi kullanabiliriz 
+                // ama en temizi UI'ı hemen güncellemektir.
+
+                await _equipmentService.ToggleEquipmentStatusAsync(equipment.Id, newStatus);
+
+                // 2. UI'ı Güncelle (Model Observable olduğu için renk OTOMATİK değişecek)
+                equipment.IsCancelled = newStatus;
+            }
+            catch (Exception ex)
+            {
+                await Shell.Current.DisplayAlert("Hata", ex.Message, "Tamam");
             }
             finally
             {

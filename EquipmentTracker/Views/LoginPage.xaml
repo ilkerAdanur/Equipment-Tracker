@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:EquipmentTracker.ViewModels"
+             x:Class="EquipmentTracker.Views.LoginPage"
+             x:DataType="vm:LoginViewModel"
+             Title="Giriş Yap"
+             BackgroundColor="#f4f4f4">
+
+    <Grid>
+        <VerticalStackLayout VerticalOptions="Center" Padding="30" Spacing="20" Background="Black">
+
+            <Image  Source="logo.png" HeightRequest="100" WidthRequest="100" HorizontalOptions="Center"/>
+
+            <Label Text="Equipment Tracker" 
+                   FontSize="24" 
+                   FontAttributes="Bold" 
+                   HorizontalOptions="Center" 
+                   TextColor="{StaticResource Primary}"/>
+
+            <Frame CornerRadius="10" Padding="0" HasShadow="True" BorderColor="Transparent">
+                <VerticalStackLayout BackgroundColor="White" Padding="15" Spacing="15">
+
+                    <VerticalStackLayout>
+                        <Label Text="Kullanıcı Adı" TextColor="Gray" FontSize="Small"/>
+                        <Entry Text="{Binding Username}" Placeholder="admin" TextColor="Black"/>
+                    </VerticalStackLayout>
+
+                    <VerticalStackLayout>
+                        <Label Text="Şifre" TextColor="Gray" FontSize="Small"/>
+                        <Entry Text="{Binding Password}" IsPassword="True" Placeholder="123" TextColor="Black"/>
+                    </VerticalStackLayout>
+
+                    <Button Text="GİRİŞ YAP" 
+                            Command="{Binding LoginCommand}" 
+                            BackgroundColor="{StaticResource Primary}" 
+                            TextColor="White"
+                            CornerRadius="20"
+                            HeightRequest="50"
+                            FontAttributes="Bold"/>
+
+                    <ActivityIndicator IsRunning="{Binding IsBusy}" Color="{StaticResource Primary}"/>
+                </VerticalStackLayout>
+            </Frame>
+
+            <Button Text="Veritabanı Ayarları" 
+                    Command="{Binding GoToSettingsCommand}" 
+                    BackgroundColor="Transparent" 
+                    TextColor="Gray" 
+                    FontSize="Small"
+                    />
+
+        </VerticalStackLayout>
+    </Grid>
+</ContentPage>

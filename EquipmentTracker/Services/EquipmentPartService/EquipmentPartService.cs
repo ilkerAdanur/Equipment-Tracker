@@ -17,13 +17,45 @@ namespace EquipmentTracker.Services.EquipmentPartService
         }
         public async Task<EquipmentPart> AddNewPartAsync(Equipment parentEquipment, EquipmentPart newPart)
         {
-            newPart.EquipmentId = parentEquipment.Id;
-            _context.EquipmentParts.Add(newPart);
-            await _context.SaveChangesAsync();
+            using var transaction = await _context.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable);
 
-            _context.Entry(newPart).State = EntityState.Detached;
+            try
+            {
+                // 1. Sıradaki Parça Numarasını Hesapla
+                var allParts = await _context.EquipmentParts
+                    .Where(p => p.EquipmentId == parentEquipment.Id)
+                    .Select(p => p.PartId)
+                    .ToListAsync();
 
-            return newPart;
+                int maxId = 0;
+                foreach (var idStr in allParts)
+                {
+                    if (int.TryParse(idStr, out int id))
+                    {
+                        if (id > maxId) maxId = id;
+                    }
+                }
+                int nextId = maxId + 1;
+
+                // 2. Numaraları Ata
+                newPart.PartId = nextId.ToString();
+                newPart.PartCode = $"{parentEquipment.EquipmentCode}.{nextId}";
+                newPart.EquipmentId = parentEquipment.Id;
+
+                // 3. Kaydet
+                _context.EquipmentParts.Add(newPart);
+                await _context.SaveChangesAsync();
+
+                _context.Entry(newPart).State = EntityState.Detached;
+
+                await transaction.CommitAsync();
+                return newPart;
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
         }
         public async Task<(string nextPartId, string nextPartCode)> GetNextPartIdsAsync(Equipment parentEquipment)
         {
@@ -45,9 +77,8 @@ namespace EquipmentTracker.Services.EquipmentPartService
                 nextId = lastId + 1;
             }
 
-            // GÜNCELLENDİ: PartId'yi "D3" (001, 002, ...) olarak formatla
-            string nextPartId = nextId.ToString("D3");
-            string nextPartCode = $"{equipCode}.{nextPartId}"; // "001.001.001"
+            string nextPartId = nextId.ToString();
+            string nextPartCode = $"{equipCode}.{nextPartId}"; 
 
             return (nextPartId, nextPartCode);
         }

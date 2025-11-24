@@ -10,7 +10,6 @@
     <CollectionView ItemsSource="{Binding Jobs}"
                     SelectionMode="None"
                     VerticalScrollBarVisibility="Always">
-
         <CollectionView.Header>
             <VerticalStackLayout HorizontalOptions="Center" Padding="0" Spacing="0">
 
@@ -22,11 +21,6 @@
                        WidthRequest="500">
 
                     <VerticalStackLayout Spacing="10">
-                        <!--<Button Text="Yeni İş Ekle (+)"
-                                Command="{Binding GoToAddNewJobCommand}"
-                                BackgroundColor="{StaticResource Primary}"
-                                TextColor="White"/>-->
-
                         <SearchBar Placeholder="İş Adı veya İş No ara..."
                                    PlaceholderColor="{StaticResource Gray400}"
                                    Text="{Binding SearchText}"
@@ -65,21 +59,38 @@
                                    VerticalOptions="Center"
                                    TextColor="Black"
                                    HorizontalOptions="End"
-                                   Margin="0,17,65,0"/>
+                                   Margin="0,17,95,0"/>
                         </VerticalStackLayout>
 
+                        
                         <Button Grid.Column="1"
-                                Text="Sil"
-                                BackgroundColor="Red"
-                                TextColor="Black"
-                                HeightRequest="40"
-                                WidthRequest="60"
-                                FontSize="Small"
+
+                                HeightRequest="20"
+                                WidthRequest="68"
+                                FontSize="Caption"
+                                FontAttributes="Bold"
                                 VerticalOptions="Center"
                                 HorizontalOptions="End"
                                 Margin="0,0,10,0"
-                                Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobListViewModel}}, Path=DeleteJobCommand}"
-                                CommandParameter="{Binding .}"/>
+                                
+                                Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobListViewModel}}, Path=ToggleJobStatusCommand}"
+                                CommandParameter="{Binding .}"
+                                
+                                >
+
+                            <Button.Triggers>
+                                <DataTrigger TargetType="Button" Binding="{Binding IsCancelled}" Value="True">
+                                    <Setter Property="Text" Value="Aktif Et" />
+                                    <Setter Property="BackgroundColor" Value="#4CAF50" />
+                                </DataTrigger>
+
+                                <DataTrigger TargetType="Button" Binding="{Binding IsCancelled}" Value="False">
+                                    <Setter Property="Text" Value="İptal Et" />
+                                    <Setter Property="BackgroundColor" Value="#D32F2F" />
+                                </DataTrigger>
+                            </Button.Triggers>
+                        </Button>
+                    
                     </Grid>
                 </Frame>
             </DataTemplate>

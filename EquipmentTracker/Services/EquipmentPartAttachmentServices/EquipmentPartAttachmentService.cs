@@ -1,9 +1,9 @@
-﻿// Dosya: Services/EquipmentPartAttachmentServices/EquipmentPartAttachmentService.cs
+﻿using Aspose.CAD;
+using Aspose.CAD.ImageOptions;
 using EquipmentTracker.Data;
 using EquipmentTracker.Models;
 using Microsoft.EntityFrameworkCore;
-using Aspose.CAD; 
-using Aspose.CAD.ImageOptions; 
+using Microsoft.Extensions.DependencyInjection;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 
@@ -12,141 +12,175 @@ namespace EquipmentTracker.Services.EquipmentPartAttachmentServices
     public class EquipmentPartAttachmentService : IEquipmentPartAttachmentService
     {
         private readonly DataContext _context;
+        private readonly IServiceProvider _serviceProvider;
 
-        public EquipmentPartAttachmentService(DataContext context)
+        public EquipmentPartAttachmentService(DataContext context, IServiceProvider serviceProvider)
         {
             _context = context;
+            _serviceProvider = serviceProvider;
         }
 
-        /// <summary>
-        /// YENİ YARDIMCI METOT: Geçersiz klasör adı karakterlerini temizler.
-        /// </summary>
+        private string GetBaseDatabasePath()
+        {
+            string defaultPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TrackerDatabase");
+            return Preferences.Get("attachment_path", defaultPath);
+        }
+
+        private string GetImagesFolderPath()
+        {
+            string basePath = GetBaseDatabasePath();
+            string imagesPath = Path.Combine(basePath, "Images");
+            if (!Directory.Exists(imagesPath)) Directory.CreateDirectory(imagesPath);
+            return imagesPath;
+        }
+
         private static string SanitizeFolderName(string folderName)
         {
-            if (string.IsNullOrEmpty(folderName))
-                return string.Empty;
-
+            if (string.IsNullOrEmpty(folderName)) return string.Empty;
             string sanitizedName = Regex.Replace(folderName, @"[\\/:*?""<>| ]", "_");
             sanitizedName = Regex.Replace(sanitizedName, @"_+", "_");
             return sanitizedName.Trim('_');
         }
 
-        /// <summary>
-        /// Ayarlardan mevcut yolu okur
-        /// </summary>
-        private string GetCurrentAttachmentPath()
+        private async Task GenerateAndSaveThumbnailInBackground(EquipmentPartAttachment attachment, string sourceDwgPath, string targetThumbName)
         {
-            string defaultPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TrackerDatabase");
-            string basePath = Preferences.Get("attachment_path", defaultPath);
-            return Path.Combine(basePath, "Attachments");
-        }
+            // UI'da barın görünmesi için başlangıç değerleri
+            attachment.IsProcessing = true;
+            attachment.ProcessingProgress = 0.1;
 
-        private string GenerateCadThumbnail(string cadFilePath)
-        {
-            string thumbFileName = $"{Path.GetFileNameWithoutExtension(cadFilePath)}_thumb.png";
-            string thumbnailFilePath = Path.Combine(Path.GetDirectoryName(cadFilePath), thumbFileName);
-            using (Aspose.CAD.Image cadImage = Aspose.CAD.Image.Load(cadFilePath))
+            using (var scope = _serviceProvider.CreateScope())
             {
-                var rasterizationOptions = new CadRasterizationOptions { PageWidth = 150, PageHeight = 150, Layouts = new[] { "Model" } };
-                var options = new PngOptions { VectorRasterizationOptions = rasterizationOptions };
-                cadImage.Save(thumbnailFilePath, options);
+                var dbContext = scope.ServiceProvider.GetRequiredService<DataContext>();
+                try
+                {
+                    string imagesFolder = GetImagesFolderPath();
+                    string targetThumbPath = Path.Combine(imagesFolder, targetThumbName);
+
+                    // İlerlemeyi simüle et
+                    var progressSimulator = Task.Run(async () =>
+                    {
+                        while (attachment.ProcessingProgress < 0.8 && attachment.IsProcessing)
+                        {
+                            await Task.Delay(100);
+                            MainThread.BeginInvokeOnMainThread(() =>
+                            {
+                                attachment.ProcessingProgress += 0.05;
+                            });
+                        }
+                    });
+
+                    // ASIL İŞLEM (Aspose ile Çevirme)
+                    await Task.Run(() =>
+                    {
+                        using (Aspose.CAD.Image cadImage = Aspose.CAD.Image.Load(sourceDwgPath))
+                        {
+                            var rasterizationOptions = new CadRasterizationOptions
+                            {
+                                PageWidth = 150,
+                                PageHeight = 150,
+                                Layouts = new[] { "Model" },
+                                BackgroundColor = Aspose.CAD.Color.White,
+                                DrawType = Aspose.CAD.FileFormats.Cad.CadDrawTypeMode.UseObjectColor
+                            };
+                            var options = new PngOptions { VectorRasterizationOptions = rasterizationOptions };
+                            cadImage.Save(targetThumbPath, options);
+                        }
+                    });
+
+                    // --- KRİTİK GÜNCELLEME KISMI ---
+
+                    // 1. Veritabanını güncelle (Arka planda)
+                    var dbAttachment = await dbContext.EquipmentPartAttachments.FindAsync(attachment.Id);
+                    if (dbAttachment != null)
+                    {
+                        dbAttachment.ThumbnailPath = targetThumbPath;
+                        await dbContext.SaveChangesAsync();
+                    }
+
+                    // 2. UI GÜNCELLEME (Sıralı ve Gecikmeli)
+                    MainThread.BeginInvokeOnMainThread(async () =>
+                    {
+                        // Barı doldur
+                        attachment.ProcessingProgress = 1.0;
+
+                        // Resim yolunu ata (Hala IsProcessing=true olduğu için bar görünür, resim arkada yüklenir)
+                        attachment.ThumbnailPath = targetThumbPath;
+
+                        // UI'ın resmi tanıması için minik bir mola ver (250ms)
+                        await Task.Delay(250);
+
+                        // Şimdi barı gizle, resmi göster
+                        attachment.IsProcessing = false;
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Part Thumbnail Hatası: {ex.Message}");
+                    MainThread.BeginInvokeOnMainThread(() => attachment.IsProcessing = false);
+                }
             }
-            return thumbnailFilePath;
         }
 
 
         public async Task<EquipmentPartAttachment> AddAttachmentAsync(JobModel parentJob, Equipment parentEquipment, EquipmentPart parentPart, FileResult fileToCopy)
         {
-            // 1. GÜNCELLENDİ: Hedef klasör yapısını istediğiniz formata göre oluştur
-            string baseAttachmentPath = GetCurrentAttachmentPath();
-
-            // İsimleri temizle
+            // ... (Klasör ve dosya kopyalama işlemleri AYNI KALIYOR - Dokunmayın) ...
+            string baseAttachmentPath = Path.Combine(GetBaseDatabasePath(), "Attachments");
             string safeJobName = SanitizeFolderName(parentJob.JobName);
             string safeEquipName = SanitizeFolderName(parentEquipment.Name);
             string safePartName = SanitizeFolderName(parentPart.Name);
 
-            // Örn: 001_Aşkale
             string jobFolder = $"{parentJob.JobNumber}_{safeJobName}";
-
-            // Örn: 001_001_Dozaj_Pompası
             string equipFolder = $"{parentJob.JobNumber}_{parentEquipment.EquipmentId}_{safeEquipName}";
-
-            // Örn: 001_001_001_Yedek_Motor (PartId'nin 001 formatında olmasını varsayarak)
             string partFolder = $"{parentJob.JobNumber}_{parentEquipment.EquipmentId}_{parentPart.PartId}_{safePartName}";
 
-            // Yolları birleştir
             string targetDirectory = Path.Combine(baseAttachmentPath, jobFolder, equipFolder, partFolder);
+            if (!Directory.Exists(targetDirectory)) Directory.CreateDirectory(targetDirectory);
 
-            if (!Directory.Exists(targetDirectory))
-            {
-                Directory.CreateDirectory(targetDirectory);
-            }
-
-            // 2. Ana dosyayı kopyala (Aynı)
             string targetFilePath = Path.Combine(targetDirectory, fileToCopy.FileName);
+
             using (var sourceStream = await fileToCopy.OpenReadAsync())
             using (var targetStream = File.Create(targetFilePath))
             {
                 await sourceStream.CopyToAsync(targetStream);
             }
+            // ... (Buraya kadar olan kısım muhtemelen sizde zaten var) ...
 
-            // 3. Küçük Resim Oluşturma (Aynı)
-            string thumbnailPath = null;
-            string extension = Path.GetExtension(targetFilePath).ToLower();
-
-            if (extension == ".dwg" || extension == ".dxf")
-            {
-                try
-                {
-                    thumbnailPath = await Task.Run(() => GenerateCadThumbnail(targetFilePath));
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"Thumbnail oluşturulamadı: {ex.Message}");
-                    thumbnailPath = null;
-                }
-            }
-
-            // 4. Veritabanı nesnesini oluştur (Aynı)
             var newAttachment = new EquipmentPartAttachment
             {
                 FileName = fileToCopy.FileName,
                 FilePath = targetFilePath,
-                ThumbnailPath = thumbnailPath,
-                EquipmentPartId = parentPart.Id
+                ThumbnailPath = null,
+                EquipmentPartId = parentPart.Id,
+                IsProcessing = false,    // YENİ
+                ProcessingProgress = 0   // YENİ
             };
 
-            // 5. Veritabanına kaydet (Aynı)
             _context.EquipmentPartAttachments.Add(newAttachment);
             await _context.SaveChangesAsync();
             _context.Entry(newAttachment).State = EntityState.Detached;
 
+            string extension = Path.GetExtension(targetFilePath).ToLower();
+            if (extension == ".dwg" || extension == ".dxf")
+            {
+                string cleanFileName = Path.GetFileNameWithoutExtension(fileToCopy.FileName);
+                string thumbName = $"{parentJob.JobNumber}_{parentEquipment.EquipmentId}_{parentPart.PartId}_{cleanFileName}_thumb.png";
+
+                // YENİ: Nesnenin kendisini gönderiyoruz
+                _ = Task.Run(() => GenerateAndSaveThumbnailInBackground(newAttachment, targetFilePath, thumbName));
+            }
+
             return newAttachment;
         }
-
-        // Aspose.CAD kullanarak bir DWG/DXF dosyasından PNG küçük resmi oluşturur.
-
-      
         public async Task OpenAttachmentAsync(EquipmentPartAttachment attachment)
         {
-            if (attachment == null || string.IsNullOrEmpty(attachment.FilePath))
-            {
-                await Shell.Current.DisplayAlert("Hata", "Dosya yolu bulunamadı.", "Tamam");
-                return;
-            }
+            if (attachment == null || string.IsNullOrEmpty(attachment.FilePath)) return;
             if (!File.Exists(attachment.FilePath))
             {
                 await Shell.Current.DisplayAlert("Hata", "Dosya bulunamadı.", "Tamam");
                 return;
             }
-            try
-            {
-                await Launcher.Default.OpenAsync(new OpenFileRequest { File = new ReadOnlyFile(attachment.FilePath) });
-            }
-            catch (Exception ex)
-            {
-                await Shell.Current.DisplayAlert("Hata", "Dosya açılamadı: " + ex.Message, "Tamam");
-            }
+            await Launcher.Default.OpenAsync(new OpenFileRequest { File = new ReadOnlyFile(attachment.FilePath) });
         }
 
         public async Task DeleteAttachmentAsync(EquipmentPartAttachment attachment)
@@ -157,11 +191,8 @@ namespace EquipmentTracker.Services.EquipmentPartAttachmentServices
                 var entry = _context.EquipmentPartAttachments.Attach(attachment);
                 entry.State = EntityState.Deleted;
                 await _context.SaveChangesAsync();
-                if (File.Exists(attachment.FilePath))
-                {
-                    File.Delete(attachment.FilePath);
-                }
-                // Küçük resmi de sil
+
+                if (File.Exists(attachment.FilePath)) File.Delete(attachment.FilePath);
                 if (!string.IsNullOrEmpty(attachment.ThumbnailPath) && File.Exists(attachment.ThumbnailPath))
                 {
                     File.Delete(attachment.ThumbnailPath);
@@ -169,10 +200,19 @@ namespace EquipmentTracker.Services.EquipmentPartAttachmentServices
             }
             catch (Exception ex)
             {
-                await Shell.Current.DisplayAlert("Hata", "Dosya silinirken bir hata oluştu: " + ex.Message, "Tamam");
+                await Shell.Current.DisplayAlert("Hata", "Dosya silinemedi: " + ex.Message, "Tamam");
             }
         }
 
-
+        public async Task DeletePartAttachmentRecordAsync(int attachmentId)
+        {
+            var attachment = await _context.EquipmentPartAttachments.FindAsync(attachmentId);
+            if (attachment != null)
+            {
+                _context.EquipmentPartAttachments.Remove(attachment);
+                await _context.SaveChangesAsync();
+                _context.Entry(attachment).State = EntityState.Detached;
+            }
+        }
     }
 }

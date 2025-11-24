@@ -8,6 +8,7 @@
              x:DataType="vm:DashboardViewModel"
              Title="{Binding Title}"
              BackgroundColor="{StaticResource Gray100}">
+
     <ContentPage.Behaviors>
         <toolkit:EventToCommandBehavior
             EventName="Appearing"
@@ -37,7 +38,29 @@
 
     <Grid>
         <ScrollView>
-            <VerticalStackLayout Padding="10">
+            <VerticalStackLayout Padding="10" Spacing="10">
+
+                <Frame BackgroundColor="#FFEBEE" 
+                       BorderColor="#FFCDD2" 
+                       CornerRadius="10" 
+                       Padding="15" 
+                       IsVisible="{Binding IsConnectionError}">
+                    <VerticalStackLayout Spacing="10">
+                        <Label Text="⚠️ Bağlantı Hatası" 
+                               TextColor="#D32F2F" 
+                               FontAttributes="Bold" 
+                               FontSize="Medium"/>
+                        <Label Text="{Binding ConnectionErrorMessage}" 
+                               TextColor="#C62828" 
+                               FontSize="Small"/>
+                        <Button Text="Ayarları Yapılandır" 
+                                Command="{Binding GoToSettingsCommand}" 
+                                BackgroundColor="#D32F2F" 
+                                TextColor="White" 
+                                HorizontalOptions="End"
+                                HeightRequest="40"/>
+                    </VerticalStackLayout>
+                </Frame>
 
                 <Label Text="Genel Bakış" FontSize="Large" FontAttributes="Bold" Margin="5,0,0,10" TextColor="Black"/>
 
@@ -68,29 +91,6 @@
                     </Frame>
                 </Grid>
 
-                <!--<Label Text="İş Durumları" FontSize="Large" FontAttributes="Bold" Margin="5,20,0,10" TextColor="Black"/>-->
-
-                <!--<Grid ColumnDefinitions="*,*,*">
-                    <Frame Grid.Column="0" Style="{StaticResource StatCard}" BorderColor="Orange">
-                        <VerticalStackLayout>
-                            <Label Text="{Binding Stats.PendingJobs}" Style="{StaticResource StatValue}" TextColor="Orange"/>
-                            <Label Text="Beklemede" Style="{StaticResource StatTitle}"/>
-                        </VerticalStackLayout>
-                    </Frame>
-                    <Frame Grid.Column="1" Style="{StaticResource StatCard}" BorderColor="Green">
-                        <VerticalStackLayout>
-                            <Label Text="{Binding Stats.ApprovedJobs}" Style="{StaticResource StatValue}" TextColor="Green"/>
-                            <Label Text="Onaylanmış" Style="{StaticResource StatTitle}"/>
-                        </VerticalStackLayout>
-                    </Frame>
-                    <Frame Grid.Column="2" Style="{StaticResource StatCard}" BorderColor="Red">
-                        <VerticalStackLayout>
-                            <Label Text="{Binding Stats.RejectedJobs}" Style="{StaticResource StatValue}" TextColor="Red"/>
-                            <Label Text="Reddedilmiş" Style="{StaticResource StatTitle}"/>
-                        </VerticalStackLayout>
-                    </Frame>
-                </Grid>-->
-
                 <Label Text="Analiz" FontSize="Large" FontAttributes="Bold" Margin="5,20,0,10" TextColor="Black"/>
 
                 <VerticalStackLayout>
@@ -108,6 +108,53 @@
                     </Frame>
                 </VerticalStackLayout>
 
+                <Frame IsVisible="{Binding IsAdminUser}"
+                       BorderColor="{StaticResource Primary}"
+                       BackgroundColor="#F0F8FF"
+                       Padding="15"
+                       Margin="0,20,0,0"
+                       CornerRadius="10">
+
+                    <VerticalStackLayout Spacing="10">
+                        <Label Text="Aktif Kullanıcılar (Yönetici Paneli)" 
+                               FontAttributes="Bold" 
+                               FontSize="Medium" 
+                               TextColor="{StaticResource Primary}"/>
+
+                        <BoxView HeightRequest="1" Color="LightGray"/>
+
+                        <CollectionView ItemsSource="{Binding ActiveUsers}" HeightRequest="200">
+                            <CollectionView.EmptyView>
+                                <Label Text="Şu an başka aktif kullanıcı yok." TextColor="Gray" HorizontalOptions="Center"/>
+                            </CollectionView.EmptyView>
+
+                            <CollectionView.ItemTemplate>
+                                <DataTemplate x:DataType="models:User">
+                                    <Grid ColumnDefinitions="*, Auto" Padding="5">
+
+                                        <VerticalStackLayout Grid.Column="0" VerticalOptions="Center">
+                                            <Label Text="{Binding FullName}" FontAttributes="Bold" TextColor="Black"/>
+                                            <Label Text="{Binding Username}" FontSize="Small" TextColor="Gray"/>
+                                        </VerticalStackLayout>
+
+                                        <HorizontalStackLayout Grid.Column="1" Spacing="10" VerticalOptions="Center">
+                                            <Label Text="● Çevrimiçi" TextColor="Green" FontSize="Small" VerticalOptions="Center"/>
+
+                                            <Button Text="KES" 
+                                                    FontSize="10"
+                                                    HeightRequest="30"
+                                                    BackgroundColor="Red"
+                                                    TextColor="White"
+                                                    Padding="5,0"
+                                                    Command="{Binding Source={RelativeSource AncestorType={x:Type vm:DashboardViewModel}}, Path=DisconnectUserCommand}"
+                                                    CommandParameter="{Binding .}"/>
+                                        </HorizontalStackLayout>
+                                    </Grid>
+                                </DataTemplate>
+                            </CollectionView.ItemTemplate>
+                        </CollectionView>
+                    </VerticalStackLayout>
+                </Frame>
             </VerticalStackLayout>
         </ScrollView>
 

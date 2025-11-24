@@ -1,13 +1,18 @@
 ﻿// Dosya: App.xaml.cs
+using EquipmentTracker.Models;
+using EquipmentTracker.Views;
+using Microsoft.Extensions.DependencyInjection;
+
 namespace EquipmentTracker
 {
     public partial class App : Application
     {
-        public App()
+        public static User? CurrentUser { get; set; }
+        public App(IServiceProvider serviceProvider)
         {
             InitializeComponent();
 
-            MainPage = new AppShell();
+            MainPage = new NavigationPage(serviceProvider.GetRequiredService<LoginPage>());
         }
 
         // YENİ EKLENEN METOT (Pencere Boyutu için)
@@ -17,7 +22,7 @@ namespace EquipmentTracker
 
             // İstediğiniz varsayılan boyutu ayarlayın
             const int WindowWidth = 525;
-            const int WindowHeight = 570;
+            const int WindowHeight = 650;
             // (Bu satırlar pencereyi ortalar - opsiyonel)
 
             window.MinimumWidth = WindowWidth;

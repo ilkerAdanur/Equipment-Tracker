@@ -1,36 +1,37 @@
-﻿// Dosya: Data/DataContext.cs
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using EquipmentTracker.Models;
 
 namespace EquipmentTracker.Data
 {
     public class DataContext : DbContext
     {
-        // EF Core'a tablolarımızın bunlar olacağını söylüyoruz.
         public DbSet<JobModel> Jobs { get; set; }
         public DbSet<Equipment> Equipments { get; set; }
         public DbSet<EquipmentPart> EquipmentParts { get; set; }
-
         public DbSet<EquipmentAttachment> EquipmentAttachments { get; set; }
         public DbSet<EquipmentPartAttachment> EquipmentPartAttachments { get; set; }
+
+        // YENİ: Kullanıcılar tablosu
+        public DbSet<User> Users { get; set; }
+
         public DataContext(DbContextOptions<DataContext> options) : base(options)
         {
         }
+
+        // SQL Server kullanacağımızı burada belirtmek yerine MauiProgram.cs'de belirteceğiz,
+        // ama model ilişkileri burada kalacak.
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
 
-            // Bir İş (JobModel) silindiğinde,
-            // ona bağlı tüm Ekipmanları (Equipments) da sil.
+            // İlişkiler ve Silme Davranışları (Aynen kalıyor)
             modelBuilder.Entity<JobModel>()
                 .HasMany(j => j.Equipments)
                 .WithOne(e => e.Job)
                 .HasForeignKey(e => e.JobId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // Bir Ekipman (Equipment) silindiğinde,
-            // ona bağlı tüm Parçaları (Parts) da sil.
             modelBuilder.Entity<Equipment>()
                 .HasMany(e => e.Parts)
                 .WithOne(p => p.Equipment)
@@ -48,6 +49,17 @@ namespace EquipmentTracker.Data
                 .WithOne(a => a.EquipmentPart)
                 .HasForeignKey(a => a.EquipmentPartId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // Varsayılan bir Admin kullanıcısı ekleyebiliriz (Opsiyonel)
+            modelBuilder.Entity<User>().HasData(
+                new User { Id = 1, Username = "admin", Password = "123", FullName = "Sistem Yöneticisi", IsAdmin = true }
+            );
+            modelBuilder.Entity<EquipmentAttachment>().Ignore(e => e.IsProcessing);
+            modelBuilder.Entity<EquipmentAttachment>().Ignore(e => e.ProcessingProgress);
+
+            // EquipmentPartAttachment için geçici alanları yoksay
+            modelBuilder.Entity<EquipmentPartAttachment>().Ignore(e => e.IsProcessing);
+            modelBuilder.Entity<EquipmentPartAttachment>().Ignore(e => e.ProcessingProgress);
         }
     }
 }

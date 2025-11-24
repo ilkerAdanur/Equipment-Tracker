@@ -1,23 +1,26 @@
-﻿// Dosya: Models/Equipment.cs
+﻿using CommunityToolkit.Mvvm.ComponentModel; // EKLENDİ
 using System.Collections.ObjectModel;
-using System.Text.Json.Serialization; 
+using System.Text.Json.Serialization;
 
 namespace EquipmentTracker.Models
 {
-    public class Equipment
+    // ObservableObject eklendi ve partial yapıldı
+    public partial class Equipment : ObservableObject
     {
-        public int Id { get; set; } 
+        public int Id { get; set; }
         public string? EquipmentId { get; set; }
         public string? EquipmentCode { get; set; }
         public string? Name { get; set; }
 
-        // Hiyerarşi (ObservableCollection olarak güncellendi)
+        // YENİ: İptal Durumu (Observable)
+        [ObservableProperty]
+        private bool _isCancelled;
+
         public ObservableCollection<EquipmentPart> Parts { get; set; } = new();
         public ObservableCollection<EquipmentAttachment> Attachments { get; set; } = new();
 
-        // Veritabanı İlişkisi (Foreign Key)
         public int JobId { get; set; }
-        [JsonIgnore] // JSON serileştirmede döngüleri engeller
+        [JsonIgnore]
         public JobModel? Job { get; set; }
     }
 }
