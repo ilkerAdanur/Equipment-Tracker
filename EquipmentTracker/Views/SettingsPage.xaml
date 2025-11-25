@@ -78,7 +78,8 @@
                 </VerticalStackLayout>
             </Frame>
 
-            <Frame BorderColor="Gray" Padding="15" WidthRequest="500" IsVisible="{Binding IsAdminUser}">
+            <Frame BorderColor="Gray" Padding="15" WidthRequest="500" >
+                <!--IsVisible="{Binding IsAdminUser}"-->
 
                 <VerticalStackLayout Spacing="10">
                     <Label Text="Ortak Dosya Konumu (Sunucu)" FontSize="Medium" FontAttributes="Bold" TextColor="Black"/>

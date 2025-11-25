@@ -65,10 +65,10 @@ namespace EquipmentTracker.ViewModels
             }
             catch (Exception ex)
             {
-                // KRİTİK HATA (Sunucuya ulaşılamadı vb.)
+                // SqlException yerine Exception kullanımı daha genel ve güvenlidir
                 if (Application.Current?.MainPage != null)
                     await Application.Current.MainPage.DisplayAlert("Bağlantı Hatası",
-                        $"Sunucuya bağlanılamadı. Lütfen internet bağlantınızı ve Sunucu IP ayarlarını kontrol edin.\n\nHata Detayı: {ex.Message}",
+                        $"Sunucuya bağlanılamadı.\nHata: {ex.Message}",
                         "Tamam");
             }
             finally

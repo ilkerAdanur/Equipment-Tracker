@@ -6,7 +6,7 @@ using EquipmentTracker.Services.Auth;
 using EquipmentTracker.Services.Job;
 using EquipmentTracker.ViewModels;
 using EquipmentTracker.Views;
-using Microsoft.Data.SqlClient;
+using MySqlConnector;
 using System;
 using System.IO;
 using System.Threading.Tasks;
@@ -184,78 +184,52 @@ namespace EquipmentTracker.ViewModels
         {
             if (string.IsNullOrWhiteSpace(ServerIp))
             {
-                await ShowAlertAsync("Hata", "IP adresi boş olamaz.");
+                await ShowAlertAsync("Hata", "Sunucu adresi boş olamaz.");
                 return;
             }
 
             if (IsBusy) return;
             IsBusy = true;
 
-            // Ayarları şimdiden kaydedelim ki JobService (DataContext) bunları kullanabilsin
-            Preferences.Set("ServerIP", ServerIp);
-            Preferences.Set("DbUser", DbUser);
-            Preferences.Set("DbPassword", DbPassword);
-
             try
             {
-                var builder = new SqlConnectionStringBuilder
+                // --- GÜNCELLEME: MySQL Bağlantı Testi ---
+                var builder = new MySqlConnectionStringBuilder
                 {
-                    DataSource = ServerIp,
-                    InitialCatalog = "TrackerDB",
+                    Server = ServerIp,
+                    Database = "u993098094_TrackerDB",
                     UserID = DbUser,
                     Password = DbPassword,
-                    TrustServerCertificate = true,
-                    ConnectTimeout = 5
+                    Port = 3306,
+                    SslMode = MySqlSslMode.None,
+                    ConnectionTimeout = 5
                 };
 
-                // 1. Bağlantıyı Test Et
-                using (var connection = new SqlConnection(builder.ConnectionString))
+                // MySqlConnection kullanıyoruz (SqlConnection DEĞİL)
+                using (var connection = new MySqlConnection(builder.ConnectionString))
                 {
                     await connection.OpenAsync();
                 }
 
-                // --- BAĞLANTI BAŞARILIYSA ---
+                // --- BAĞLANTI BAŞARILI ---
+
+                Preferences.Set("ServerIP", ServerIp);
+                Preferences.Set("DbUser", DbUser);
+                Preferences.Set("DbPassword", DbPassword);
+
                 SetConnectedState(true);
-                if (IsConnected) await LoadGlobalAttachmentPath();
-                await ShowAlertAsync("Başarılı", "Bağlantı sağlandı ve ayarlar kaydedildi.");
+
+                if (IsConnected)
+                {
+                    await LoadGlobalAttachmentPath();
+                }
+
+                await ShowAlertAsync("Başarılı", "Hostinger veritabanına başarıyla bağlanıldı!");
             }
-            catch (SqlException ex)
+            catch (MySqlException ex) // SqlException yerine MySqlException
             {
-                // *** ÖZEL DURUM: Veritabanı Yok Hatası (Hata Kodu 4060) ***
-                if (ex.Number == 4060)
-                {
-                    try
-                    {
-                        // Kullanıcıya sormadan veya sorarak otomatik kur
-                        // "Veritabanı bulunamadı. Otomatik oluşturuluyor..." gibi bir mesaj (Toast) verilebilir.
-
-                        using (var scope = _serviceProvider.CreateScope())
-                        {
-                            var jobService = scope.ServiceProvider.GetRequiredService<IJobService>();
-
-                            // Veritabanını ve Tabloları Oluştur + Admin Ekle
-                            await jobService.InitializeDatabaseAsync();
-                        }
-
-                        // Tekrar bağlanmayı dene (Teyit amaçlı)
-                        SetConnectedState(true);
-                        await LoadGlobalAttachmentPath();
-
-                        await ShowAlertAsync("Kurulum Tamamlandı",
-                            "Veritabanı bulunamadığı için otomatik olarak oluşturuldu ve varsayılan veriler (Admin) eklendi. Bağlantı başarılı.");
-                    }
-                    catch (Exception createEx)
-                    {
-                        SetConnectedState(false);
-                        await ShowAlertAsync("Kurulum Hatası", $"Veritabanı oluşturulurken hata çıktı: {createEx.Message}");
-                    }
-                }
-                else
-                {
-                    // Diğer SQL hataları (Şifre yanlış, Sunucu kapalı vs.)
-                    SetConnectedState(false);
-                    await ShowAlertAsync("Bağlantı Hatası", $"Sunucuya bağlanılamadı.\nHata Kodu: {ex.Number}\nMesaj: {ex.Message}");
-                }
+                SetConnectedState(false);
+                await ShowAlertAsync("Bağlantı Hatası", $"Sunucuya bağlanılamadı.\nHata Kodu: {ex.Number}\nMesaj: {ex.Message}");
             }
             catch (Exception ex)
             {
@@ -267,7 +241,6 @@ namespace EquipmentTracker.ViewModels
                 IsBusy = false;
             }
         }
-
 
         [RelayCommand]
         async Task Disconnect()
@@ -333,11 +306,11 @@ namespace EquipmentTracker.ViewModels
         [RelayCommand]
         async Task SaveAttachmentPath()
         {
-            if (!IsAdminUser) // IsAdminUser property'niz zaten vardı
-            {
-                await ShowAlertAsync("Yetkisiz", "Bu ayarı sadece yöneticiler değiştirebilir.");
-                return;
-            }
+            //if (!IsAdminUser) // IsAdminUser property'niz zaten vardı
+            //{
+            //    await ShowAlertAsync("Yetkisiz", "Bu ayarı sadece yöneticiler değiştirebilir.");
+            //    return;
+            //}
 
             if (string.IsNullOrWhiteSpace(AttachmentPath)) return;
 

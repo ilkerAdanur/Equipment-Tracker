@@ -13,6 +13,7 @@ using EquipmentTracker.Services.StatisticsServices;
 using EquipmentTracker.ViewModels;
 using EquipmentTracker.Views;
 using Microsoft.EntityFrameworkCore;
+using MySqlConnector;
 
 public static class MauiProgram
 {
@@ -30,33 +31,33 @@ public static class MauiProgram
                 fonts.AddFont("OpenSans-Semibold.ttf", "OpenSansSemibold");
             });
 
-        // --- SQL SERVER BAĞLANTI AYARI ---
-
-        // ÖNEMLİ: Aşağıdaki IP Adresi (192.168.1.XXX), SQL Server'ın kurulu olduğu bilgisayarın IP'si olmalı.
-        // Eğer uygulamayı SQL Server'ın olduğu bilgisayarda çalıştırıyorsanız "Server=localhost" yeterli.
-        // Uzaktan erişim için: "Server=192.168.1.20,1433;Database=TrackerDB;User Id=sa;Password=Sifreniz123;TrustServerCertificate=True;"
-
-        // Şimdilik local geliştirme için (SSMS ile bağlanacağınız):
-        // Trusted_Connection=True; -> Windows Authentication kullanır (Kullanıcı adı şifre sormaz)
-        // TrustServerCertificate=True; -> SSL sertifikası hatasını engeller.
-
-        // SQL Server Kullanımı:
+        // --- VERİTABANI BAĞLANTI AYARI (MySQL - Hostinger) ---
         builder.Services.AddDbContext<DataContext>(options =>
         {
-            string serverIp = Preferences.Get("ServerIP", string.Empty);
-            string dbUser = Preferences.Get("DbUser", "tracker_user");
-            string dbPass = Preferences.Get("DbPassword", "123456");
+            string serverIp = Preferences.Get("ServerIP", "equipmenttracker.ilkeradanur.com");
+            string dbUser = Preferences.Get("DbUser", "u993098094_TrackerUser");
+            string dbPass = Preferences.Get("DbPassword", "");
 
-            if (string.IsNullOrWhiteSpace(serverIp))
+            // Eğer IP boşsa bağlanma
+            if (string.IsNullOrWhiteSpace(serverIp)) return;
+
+            // MySQL Bağlantı Cümlesi
+            var connectionBuilder = new MySqlConnectionStringBuilder
             {
-                options.UseSqlServer("Server=;Database=TrackerDB;");
-                return;
-            }
+                Server = serverIp,
+                Database = "u993098094_TrackerDB",
+                UserID = dbUser,
+                Password = dbPass,
+                Port = 3306,
+                SslMode = MySqlSslMode.None,
+                ConnectionTimeout = 10
+            };
 
-            // GÜVENLİ BAĞLANTI DİZESİ
-            string connectionString = $"Server={serverIp};Database=TrackerDB;User Id={dbUser};Password={dbPass};TrustServerCertificate=True;Connection Timeout=10;";
-
-            options.UseSqlServer(connectionString);
+            // DÜZELTME BURADA: UseSqlServer YERİNE UseMySql
+            options.UseMySql(
+                connectionBuilder.ConnectionString,
+                ServerVersion.AutoDetect(connectionBuilder.ConnectionString)
+            );
         });
 
         // --- DİĞER SERVİSLER (Aynen kalıyor) ---

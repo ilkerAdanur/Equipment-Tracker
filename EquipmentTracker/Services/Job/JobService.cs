@@ -3,8 +3,10 @@ using EquipmentTracker.Data;
 using EquipmentTracker.Models;
 using EquipmentTracker.Models.Enums;
 using Microsoft.EntityFrameworkCore;
+using MySqlConnector;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Net;
 using System.Text.RegularExpressions;
 
 namespace EquipmentTracker.Services.Job
@@ -82,6 +84,8 @@ namespace EquipmentTracker.Services.Job
         private string SanitizeFolderName(string name)
         {
             if (string.IsNullOrEmpty(name)) return "Unknown";
+
+            // Geçersiz karakterleri temizle
             foreach (char c in Path.GetInvalidFileNameChars())
             {
                 name = name.Replace(c, '_');
@@ -164,15 +168,18 @@ namespace EquipmentTracker.Services.Job
         {
             try
             {
-                // 1. Veritabanı ve Tabloları Oluştur (Eğer yoksa)
+                // MySQL'de EnsureCreatedAsync genellikle yeterlidir.
                 await _context.Database.EnsureCreatedAsync();
-
-                // 2. Başlangıç Verilerini Doldur (Seed)
                 await SeedDataAsync();
+            }
+            catch (MySqlException ex) // SqlException yerine
+            {
+                System.Diagnostics.Debug.WriteLine($"MySQL Hatası: {ex.Message}");
+                throw;
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Veritabanı başlatma hatası: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"Genel DB Hatası: {ex.Message}");
                 throw;
             }
         }
@@ -227,6 +234,7 @@ namespace EquipmentTracker.Services.Job
 
         public async Task AddJobAsync(JobModel newJob)
         {
+            // MySQL için ReadCommitted idealdir
             using var transaction = await _context.Database.BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted);
 
             try
@@ -250,29 +258,47 @@ namespace EquipmentTracker.Services.Job
                 _context.Jobs.Add(newJob);
                 await _context.SaveChangesAsync();
 
-                // 3. KLASÖR OLUŞTURMA (DÜZELTİLDİ)
+                // 3. KLASÖR OLUŞTURMA (FTP İLE GÜNCELLENDİ)
                 try
                 {
-                    // BU METOT ZATEN ".../Attachments" DÖNDÜRÜYOR
-                    string baseAttachmentPath = await GetGlobalAttachmentPathAsync();
+                    // Veritabanından FTP Ayarlarını Çek
+                    var settings = await _context.AppSettings.AsNoTracking().ToListAsync();
+                    string ftpHost = settings.FirstOrDefault(x => x.Key == "FtpHost")?.Value;
+                    string ftpUser = settings.FirstOrDefault(x => x.Key == "FtpUser")?.Value;
+                    string ftpPass = settings.FirstOrDefault(x => x.Key == "FtpPass")?.Value;
+                    string ftpRoot = settings.FirstOrDefault(x => x.Key == "FtpRootPath")?.Value ?? "/public_html/TrackerData";
 
-                    // HATA BURADAYDI: Aşağıdaki satırı SİLDİK.
-                    // string finalPath = Path.Combine(baseAttachmentPath, "Attachments"); <-- BU YANLIŞTI
-
-                    string safeJobName = SanitizeFolderName(newJob.JobName);
-                    string jobFolder = $"{newJob.JobNumber}_{safeJobName}";
-
-                    // DOĞRUSU: Direkt gelen yolun altına iş klasörünü aç
-                    string targetDirectory = Path.Combine(baseAttachmentPath, jobFolder);
-
-                    if (!Directory.Exists(targetDirectory))
+                    if (!string.IsNullOrEmpty(ftpHost) && !string.IsNullOrEmpty(ftpUser))
                     {
-                        Directory.CreateDirectory(targetDirectory);
+                        string safeJobName = SanitizeFolderName(newJob.JobName);
+                        string jobFolder = $"{newJob.JobNumber}_{safeJobName}";
+
+                        // FTP Adresini Oluştur: ftp://185.185.185.185/public_html/TrackerData/Attachments/101_IsAdi
+                        string targetUrl = $"ftp://{ftpHost}{ftpRoot}/Attachments/{jobFolder}";
+
+                        // Klasör Oluşturma İsteği Gönder
+                        FtpWebRequest request = (FtpWebRequest)WebRequest.Create(targetUrl);
+                        request.Method = WebRequestMethods.Ftp.MakeDirectory;
+                        request.Credentials = new NetworkCredential(ftpUser, ftpPass);
+
+                        using (var response = (FtpWebResponse)await request.GetResponseAsync())
+                        {
+                            // Başarılı, klasör oluştu.
+                        }
+                    }
+                }
+                catch (WebException ex)
+                {
+                    // Hata 550: Klasör zaten var demektir, bu bir sorun değil.
+                    FtpWebResponse response = (FtpWebResponse)ex.Response;
+                    if (response.StatusCode != FtpStatusCode.ActionNotTakenFileUnavailable)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"FTP Hatası: {ex.Message}");
                     }
                 }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine($"Job klasörü oluşturulamadı: {ex.Message}");
+                    System.Diagnostics.Debug.WriteLine($"Klasör oluşturma hatası: {ex.Message}");
                 }
 
                 await transaction.CommitAsync();
