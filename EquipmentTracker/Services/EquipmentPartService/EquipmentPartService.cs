@@ -10,10 +10,12 @@ namespace EquipmentTracker.Services.EquipmentPartService
     class EquipmentPartService : IEquipmentPartService
     {
         private readonly DataContext _context;
+        private readonly FtpHelper _ftpHelper;
 
-        public EquipmentPartService(DataContext context)
+        public EquipmentPartService(DataContext context, FtpHelper ftpHelper)
         {
             _context = context;
+            _ftpHelper = ftpHelper;
         }
         public async Task<EquipmentPart> AddNewPartAsync(Equipment parentEquipment, EquipmentPart newPart)
         {
@@ -70,23 +72,16 @@ namespace EquipmentTracker.Services.EquipmentPartService
 
                     if (parentJob != null)
                     {
-                        // D. İsimleri Temizle
                         string safeJobName = SanitizeFolderName(parentJob.JobName);
                         string safeEquipName = SanitizeFolderName(parentEquipment.Name);
                         string safePartName = SanitizeFolderName(newPart.Name);
 
-                        // E. Klasör Hiyerarşisini Oluştur
                         string jobFolder = $"{parentJob.JobNumber}_{safeJobName}";
                         string equipFolder = $"{parentJob.JobNumber}_{parentEquipment.EquipmentId}_{safeEquipName}";
                         string partFolder = $"{parentJob.JobNumber}_{parentEquipment.EquipmentId}_{newPart.PartId}_{safePartName}";
 
-                        string targetDirectory = Path.Combine(baseAttachmentPath, jobFolder, equipFolder, partFolder);
-
-                        // F. Klasörü Oluştur (Eğer yoksa)
-                        if (!Directory.Exists(targetDirectory))
-                        {
-                            Directory.CreateDirectory(targetDirectory);
-                        }
+                        string ftpPath = $"Attachments/{jobFolder}/{equipFolder}/{partFolder}";
+                        await _ftpHelper.CreateDirectoryAsync(ftpPath);
                     }
                 }
                 catch (Exception ex)

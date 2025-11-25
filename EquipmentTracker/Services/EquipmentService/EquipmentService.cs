@@ -10,10 +10,12 @@ namespace EquipmentTracker.Services.EquipmentService
     public class EquipmentService : IEquipmentService
     {
         private readonly DataContext _context;
+        private readonly FtpHelper _ftpHelper;
 
-        public EquipmentService(DataContext context)
+        public EquipmentService(DataContext context, FtpHelper ftpHelper)
         {
             _context = context;
+            _ftpHelper = ftpHelper;
         }
         private string GetCurrentAttachmentPath()
         {
@@ -90,23 +92,22 @@ namespace EquipmentTracker.Services.EquipmentService
                     string safeJobName = SanitizeFolderName(parentJob.JobName);
                     string safeEquipName = SanitizeFolderName(newEquipment.Name);
 
-                    // D. Klasör İsimleri
                     string jobFolder = $"{parentJob.JobNumber}_{safeJobName}";
                     string equipFolder = $"{parentJob.JobNumber}_{newEquipment.EquipmentId}_{safeEquipName}";
 
-                    // E. Hedef Yolu Birleştir: ...\Attachments\İşKlasörü\EkipmanKlasörü
-                    string targetDirectory = Path.Combine(baseAttachmentPath, jobFolder, equipFolder);
+                    string localTargetDirectory = Path.Combine(baseAttachmentPath, jobFolder, equipFolder);
 
-                    // F. Klasörü Oluştur (Erişim izni varsa oluşturur)
-                    if (!Directory.Exists(targetDirectory))
+                    if (!Directory.Exists(localTargetDirectory))
                     {
-                        Directory.CreateDirectory(targetDirectory);
+                        Directory.CreateDirectory(localTargetDirectory);
                     }
+                    string ftpPath = $"Attachments/{jobFolder}/{equipFolder}";
+                    await _ftpHelper.CreateDirectoryAsync(ftpPath);
                 }
                 catch (Exception ex)
                 {
                     // Klasör hatası işlemi geri almasın, loglayıp devam etsin
-                    System.Diagnostics.Debug.WriteLine($"Equipment klasörü oluşturulamadı: {ex.Message}");
+                    System.Diagnostics.Debug.WriteLine($"Equipment klasör hatası: {ex.Message}");
                 }
                 // -----------------------------------------------------------
 

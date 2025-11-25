@@ -12,12 +12,12 @@ namespace EquipmentTracker.Services.Job
     public class JobService : IJobService
     {
         private readonly DataContext _context;
+        private readonly FtpHelper _ftpHelper;
 
-        public JobService(DataContext context)
+        public JobService(DataContext context, FtpHelper ftpHelper)
         {
             _context = context;
-
-
+            _ftpHelper = ftpHelper;
         }
 
         public async Task<string> GetGlobalAttachmentPathAsync()
@@ -253,22 +253,21 @@ namespace EquipmentTracker.Services.Job
                 // 3. KLASÖR OLUŞTURMA (DÜZELTİLDİ)
                 try
                 {
-                    // BU METOT ZATEN ".../Attachments" DÖNDÜRÜYOR
-                    string baseAttachmentPath = await GetGlobalAttachmentPathAsync();
-
-                    // HATA BURADAYDI: Aşağıdaki satırı SİLDİK.
-                    // string finalPath = Path.Combine(baseAttachmentPath, "Attachments"); <-- BU YANLIŞTI
-
+                    string baseAttachmentPath = await GetGlobalAttachmentPathAsync(); // Yerel yol
                     string safeJobName = SanitizeFolderName(newJob.JobName);
                     string jobFolder = $"{newJob.JobNumber}_{safeJobName}";
 
-                    // DOĞRUSU: Direkt gelen yolun altına iş klasörünü aç
-                    string targetDirectory = Path.Combine(baseAttachmentPath, jobFolder);
+                    string localTargetDirectory = Path.Combine(baseAttachmentPath, jobFolder);
 
-                    if (!Directory.Exists(targetDirectory))
+                    if (!Directory.Exists(localTargetDirectory))
                     {
-                        Directory.CreateDirectory(targetDirectory);
+                        Directory.CreateDirectory(localTargetDirectory);
                     }
+
+                    // B. FTP KLASÖRÜ (YENİ)
+                    // FTP'de önce "Attachments" klasörünü garantiye alalım, sonra iş klasörünü.
+                    await _ftpHelper.CreateDirectoryAsync("Attachments");
+                    await _ftpHelper.CreateDirectoryAsync($"Attachments/{jobFolder}");
                 }
                 catch (Exception ex)
                 {

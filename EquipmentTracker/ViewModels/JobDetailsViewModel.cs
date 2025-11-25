@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using EquipmentTracker.Models;
 using EquipmentTracker.Models.Enums; // YENİ ENUM KULLANIMI
+using EquipmentTracker.Services;
 using EquipmentTracker.Services.AttachmentServices;
 using EquipmentTracker.Services.EquipmentPartAttachmentServices;
 using EquipmentTracker.Services.EquipmentPartService;
@@ -28,6 +29,7 @@ namespace EquipmentTracker.ViewModels
         private readonly IEquipmentPartService _partService; // Sizin isimlendirmeniz
         private readonly IAttachmentService _attachmentService;
         private readonly IEquipmentPartAttachmentService _equipmentPartAttachmentService;
+        private readonly FtpHelper _ftpHelper;
         public ObservableCollection<EquipmentDisplayViewModel> DisplayEquipments { get; set; } = new();
         [ObservableProperty]
         JobModel _currentJob;
@@ -61,7 +63,8 @@ namespace EquipmentTracker.ViewModels
                                  IEquipmentService equipmentService,
                                  IEquipmentPartService partService, // Sizin isimlendirmeniz
                                  IAttachmentService attachmentService,
-                                 IEquipmentPartAttachmentService equipmentPartAttachmentService)
+                                 IEquipmentPartAttachmentService equipmentPartAttachmentService,
+                                 FtpHelper ftpHelper)
         {
             _jobService = jobService;
             _equipmentService = equipmentService;
@@ -69,6 +72,7 @@ namespace EquipmentTracker.ViewModels
             _attachmentService = attachmentService;
             _equipmentPartAttachmentService = equipmentPartAttachmentService;
             Title = "İş Detayı";
+            _ftpHelper = ftpHelper;
         }
         [RelayCommand]
         async Task GoToHome()
@@ -739,6 +743,32 @@ namespace EquipmentTracker.ViewModels
 
                 // 4. Kaydet
                 await MiniExcel.SaveAsAsync(filePath, excelData, overwriteFile: true);
+                var jobForFtp = CurrentJob; // Thread güvenliği için kopyala
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        // Klasör yolunu tekrar hesapla (ViewModel içinde sanitize metodu yoksa kopyala veya helper kullan)
+                        // Burada basitçe Regex kullanabilirsin:
+                        string safeJobName = Regex.Replace(jobForFtp.JobName, @"[\\/:*?""<>| ]", "_");
+                        safeJobName = Regex.Replace(safeJobName, @"_+", "_").Trim('_');
+                        string jobFolder = $"{jobForFtp.JobNumber}_{safeJobName}";
+
+                        // Hedef FTP klasörü: Attachments/IsKlasoru/
+                        string ftpFolderPath = $"Attachments/{jobFolder}";
+
+                        // Klasör olduğundan emin ol
+                        await _ftpHelper.CreateDirectoryAsync("Attachments");
+                        await _ftpHelper.CreateDirectoryAsync(ftpFolderPath);
+
+                        // Yükle
+                        await _ftpHelper.UploadFileAsync(filePath, ftpFolderPath);
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Excel FTP Hatası: {ex.Message}");
+                    }
+                });
             }
             catch (IOException)
             {

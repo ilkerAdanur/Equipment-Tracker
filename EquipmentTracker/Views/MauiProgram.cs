@@ -2,6 +2,7 @@
 using CommunityToolkit.Maui.Storage;
 using EquipmentTracker;
 using EquipmentTracker.Data;
+using EquipmentTracker.Services;
 using EquipmentTracker.Services.AttachmentServices;
 using EquipmentTracker.Services.Auth;
 using EquipmentTracker.Services.EquipmentPartAttachmentServices;
@@ -43,20 +44,25 @@ public static class MauiProgram
         // SQL Server Kullanımı:
         builder.Services.AddDbContext<DataContext>(options =>
         {
-            string serverIp = Preferences.Get("ServerIP", string.Empty);
-            string dbUser = Preferences.Get("DbUser", "tracker_user");
-            string dbPass = Preferences.Get("DbPassword", "123456");
+            string serverIp = Preferences.Get("ServerIP", "");
+            string dbName = Preferences.Get("DbName", "");
+            string dbUser = Preferences.Get("DbUser", "");
+            string dbPass = Preferences.Get("DbPassword", "");
 
-            if (string.IsNullOrWhiteSpace(serverIp))
+            // Eğer ayarlar boşsa, uygulama patlamasın diye boş bir connection string veya dummy kuruyoruz
+            if (string.IsNullOrWhiteSpace(serverIp) || string.IsNullOrWhiteSpace(dbName))
             {
-                options.UseSqlServer("Server=;Database=TrackerDB;");
+                // Geçici olarak InMemory veya boş bırakabilirsiniz, ancak migration hatası vermemesi için
+                // kullanıcıyı Login ekranında Settings'e yönlendirmek en doğrusu.
                 return;
             }
 
-            // GÜVENLİ BAĞLANTI DİZESİ
-            string connectionString = $"Server={serverIp};Database=TrackerDB;User Id={dbUser};Password={dbPass};TrustServerCertificate=True;Connection Timeout=10;";
+            // MySQL Bağlantı Dizesi
+            // Hostinger için genellikle port 3306'dır.
+            string connectionString = $"Server={serverIp};Database={dbName};User={dbUser};Password={dbPass};Port=3306;";
 
-            options.UseSqlServer(connectionString);
+            // Pomelo MySQL Kullanımı
+            options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString));
         });
 
         // --- DİĞER SERVİSLER (Aynen kalıyor) ---
@@ -68,7 +74,7 @@ public static class MauiProgram
         builder.Services.AddTransient<IStatisticsService, StatisticsService>();
         builder.Services.AddTransient<IAuthService, AuthService>();
 
-
+        builder.Services.AddSingleton<FtpHelper>();
         builder.Services.AddSingleton<IFolderPicker>(FolderPicker.Default);
 
         builder.Services.AddTransient<LoginViewModel>();

@@ -13,7 +13,7 @@
     </ContentPage.Resources>
 
     <ScrollView>
-        <VerticalStackLayout HorizontalOptions="Center" Padding="0,10,0,0" Spacing="15" >
+        <VerticalStackLayout HorizontalOptions="Center" Padding="0,10,0,20" Spacing="15" >
 
             <Frame BorderColor="{Binding StatusColor}" BackgroundColor="#F5F5F5" Padding="15"  HorizontalOptions="Center">
                 <Label Text="{Binding StatusText}" 
@@ -25,23 +25,32 @@
 
             <Frame BorderColor="Gray" Padding="15" WidthRequest="500" >
                 <VerticalStackLayout Spacing="10">
-                    <Label Text="Veritabanı Giriş Bilgileri" FontSize="Medium" FontAttributes="Bold" TextColor="Black"/>
+                    <Label Text="Veritabanı Giriş Bilgileri (MySQL)" FontSize="Medium" FontAttributes="Bold" TextColor="Black"/>
 
                     <VerticalStackLayout>
-                        <Label Text="Sunucu IP:" TextColor="Gray" FontSize="Micro"/>
+                        <Label Text="Sunucu IP / Host:" TextColor="Gray" FontSize="Micro"/>
                         <Entry Text="{Binding ServerIp}" 
                                IsEnabled="{Binding IsInputsEnabled}"
-                               Placeholder="192.168.1.20" 
+                               Placeholder="46.202.xxx.xxx veya mysql.hostinger..." 
                                TextColor="White"
                                BackgroundColor="{Binding IsInputsEnabled, Converter={toolkit:BoolToObjectConverter TrueObject=Transparent, FalseObject=#EEEEEE}}"/>
                     </VerticalStackLayout>
 
                     <VerticalStackLayout>
-                        <Label Text="Kullanıcı Adı:" TextColor="Gray" FontSize="Micro"/>
+                        <Label Text="Veritabanı Adı (DB Name):" TextColor="Gray" FontSize="Micro"/>
+                        <Entry Text="{Binding DbName}" 
+                               IsEnabled="{Binding IsInputsEnabled}"
+                               Placeholder="u993098094_TrackerDB" 
+                               TextColor="White"
+                               BackgroundColor="{Binding IsInputsEnabled, Converter={toolkit:BoolToObjectConverter TrueObject=Transparent, FalseObject=#EEEEEE}}"/>
+                    </VerticalStackLayout>
+
+                    <VerticalStackLayout>
+                        <Label Text="Veritabanı Kullanıcısı:" TextColor="Gray" FontSize="Micro"/>
                         <Entry Text="{Binding DbUser}" 
                                IsEnabled="{Binding IsInputsEnabled}"
-                               Placeholder="tracker_user" 
-                               TextColor="White"
+                               Placeholder="u993098094_trackeruser" 
+                               TextColor="White" 
                                BackgroundColor="{Binding IsInputsEnabled, Converter={toolkit:BoolToObjectConverter TrueObject=Transparent, FalseObject=#EEEEEE}}"/>
                     </VerticalStackLayout>
 
@@ -54,76 +63,118 @@
                                BackgroundColor="{Binding IsInputsEnabled, Converter={toolkit:BoolToObjectConverter TrueObject=Transparent, FalseObject=#EEEEEE}}"/>
                     </VerticalStackLayout>
 
-                    <Button Text="KAYDET VE BAĞLAN" 
-                            Command="{Binding SaveServerIpCommand}" 
-                            IsVisible="{Binding IsConnected, Converter={StaticResource InvertedBoolConverter}}"
-                            BackgroundColor="#2196F3"
-                            FontAttributes="Bold"
-                            HeightRequest="45"/>
+                    <Grid ColumnDefinitions="*">
+                        <Button Text="VERİTABANINA BAĞLAN VE KAYDET" 
+                                Command="{Binding ConnectDatabaseCommand}" 
+                                IsVisible="{Binding IsConnected, Converter={StaticResource InvertedBoolConverter}}"
+                                BackgroundColor="#2196F3" 
+                                FontAttributes="Bold" 
+                                HeightRequest="45"/>
 
-                    <Button Text="BAĞLANTIYI KES" 
-                            Command="{Binding DisconnectCommand}" 
-                            IsVisible="{Binding IsConnected}"
-                            BackgroundColor="#D32F2F"
-                            FontAttributes="Bold"
-                            HorizontalOptions="Center"
-                            HeightRequest="45"/>
+                        <Button Text="VERİTABANI BAĞLANTISINI KES" 
+                                Command="{Binding DisconnectDatabaseCommand}" 
+                                IsVisible="{Binding IsConnected}"
+                                BackgroundColor="#D32F2F" 
+                                FontAttributes="Bold" 
+                                HeightRequest="45"/>
+                    </Grid>
+                </VerticalStackLayout>
+            </Frame>
 
-                    <!--<Label Text="Not: Bağlantı sonrası yeniden başlatın" 
-                           IsVisible="{Binding IsConnected}"
-                           TextColor="Gray" 
-                           FontSize="Micro" 
-                           HorizontalOptions="Center"/>-->
+            <Frame BorderColor="Gray" Padding="15" WidthRequest="500" >
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="Dosya Sunucusu (FTP) Ayarları" FontSize="Medium" FontAttributes="Bold" TextColor="Black"/>
+                    <Label Text="Dosyaların sunucuda tutulacağı alan." TextColor="Gray" FontSize="Micro"/>
 
+                    <VerticalStackLayout>
+                        <Label Text="FTP Sunucu (Host):" TextColor="Gray" FontSize="Micro"/>
+                        <Entry Text="{Binding FtpHost}" 
+                               IsEnabled="{Binding IsFtpInputsEnabled}"
+                               Placeholder="ftp://46.202.xxx.xxx" 
+                               TextColor="White"
+                               BackgroundColor="{Binding IsFtpInputsEnabled, Converter={toolkit:BoolToObjectConverter TrueObject=Transparent, FalseObject=#EEEEEE}}"/>
+                    </VerticalStackLayout>
+
+                    <VerticalStackLayout>
+                        <Label Text="FTP Kullanıcı Adı:" TextColor="Gray" FontSize="Micro"/>
+                        <Entry Text="{Binding FtpUser}" 
+                               IsEnabled="{Binding IsFtpInputsEnabled}"
+                               Placeholder="u993098094.ftpuser" 
+                               TextColor="White"
+                               BackgroundColor="{Binding IsFtpInputsEnabled, Converter={toolkit:BoolToObjectConverter TrueObject=Transparent, FalseObject=#EEEEEE}}"/>
+                    </VerticalStackLayout>
+
+                    <VerticalStackLayout>
+                        <Label Text="FTP Şifre:" TextColor="Gray" FontSize="Micro"/>
+                        <Entry Text="{Binding FtpPassword}" 
+                               IsEnabled="{Binding IsFtpInputsEnabled}"
+                               IsPassword="True" 
+                               TextColor="White"
+                               BackgroundColor="{Binding IsFtpInputsEnabled, Converter={toolkit:BoolToObjectConverter TrueObject=Transparent, FalseObject=#EEEEEE}}"/>
+                    </VerticalStackLayout>
+
+                    <Grid ColumnDefinitions="*">
+                        <Button Text="FTP'YE BAĞLAN VE KAYDET" 
+                                Command="{Binding ConnectFtpCommand}" 
+                                IsVisible="{Binding IsFtpConnected, Converter={StaticResource InvertedBoolConverter}}"
+                                BackgroundColor="#FF9800" 
+                                FontAttributes="Bold" 
+                                HeightRequest="45"/>
+
+                        <Button Text="FTP BAĞLANTISINI KES" 
+                                Command="{Binding DisconnectFtpCommand}" 
+                                IsVisible="{Binding IsFtpConnected}"
+                                BackgroundColor="#D32F2F" 
+                                FontAttributes="Bold" 
+                                HeightRequest="45"/>
+                    </Grid>
                 </VerticalStackLayout>
             </Frame>
 
             <Frame BorderColor="Gray" Padding="15" WidthRequest="500" IsVisible="{Binding IsAdminUser}">
-
                 <VerticalStackLayout Spacing="10">
-                    <Label Text="Ortak Dosya Konumu (Sunucu)" FontSize="Medium" FontAttributes="Bold" TextColor="Black"/>
+                    <Label Text="Yerel Çalışma Klasörü (Cache)" FontSize="Medium" FontAttributes="Bold" TextColor="Black"/>
 
                     <VerticalStackLayout>
                         <Label Text="Dosya Yolu:" TextColor="Gray" FontSize="Micro"/>
                         <Grid ColumnDefinitions="*, Auto" ColumnSpacing="5">
-
                             <Entry Grid.Column="0" 
-                           Text="{Binding AttachmentPath}" 
-                           IsEnabled="True" 
-                           Placeholder="Henüz ayarlanmadı..." 
-                           TextColor="Black"
-                           BackgroundColor="#F5F5F5"/>
+                                   Text="{Binding AttachmentPath}" 
+                                   IsEnabled="True" 
+                                   Placeholder="Henüz ayarlanmadı..." 
+                                   TextColor="Black"
+                                   BackgroundColor="#F5F5F5"/>
 
                             <Button Grid.Column="1" 
-                            Text="📂" 
-                            IsEnabled="True"
-                            Command="{Binding SelectAttachmentPathCommand}" 
-                            BackgroundColor="Gray" 
-                            TextColor="White"
-                            WidthRequest="50"
-                            Padding="0"/>
+                                    Text="📂" 
+                                    IsEnabled="True"
+                                    Command="{Binding SelectAttachmentPathCommand}" 
+                                    BackgroundColor="Gray" 
+                                    TextColor="White"
+                                    WidthRequest="50"
+                                    Padding="0"/>
                         </Grid>
                     </VerticalStackLayout>
 
-                    <Button Text="KONUMU KAYDET (TÜMÜ İÇİN)" 
-                    Command="{Binding SaveAttachmentPathCommand}" 
-                    BackgroundColor="#2196F3" 
-                    FontAttributes="Bold" 
-                    HeightRequest="45"/>
+                    <Button Text="KONUMU KAYDET (YEREL)" 
+                            Command="{Binding SaveAttachmentPathCommand}" 
+                            BackgroundColor="#2196F3" 
+                            FontAttributes="Bold" 
+                            HeightRequest="45"/>
 
-                    <Label Text="* Bu ayar değiştirildiğinde tüm kullanıcılarda güncellenir." 
-                   TextColor="Red" FontSize="Micro"/>
+                    <Label Text="* Bu ayar sadece bu bilgisayardaki önbellek klasörünü belirler."
+                           TextColor="Gray" FontSize="Micro"/>
                 </VerticalStackLayout>
             </Frame>
+
             <Button Text="OTURUMU KAPAT" 
-        Command="{Binding LogoutCommand}" 
-        IsVisible="{Binding IsUserLoggedIn}"
-        BackgroundColor="Red"
-        TextColor="White"
-        Margin="0,0,0,200"
-        HeightRequest="45"
-        WidthRequest="350"
-            />
+                    Command="{Binding LogoutCommand}" 
+                    IsVisible="{Binding IsUserLoggedIn}"
+                    BackgroundColor="Red"
+                    TextColor="White"
+                    Margin="0,20,0,100"
+                    HeightRequest="45"
+                    WidthRequest="350" />
         </VerticalStackLayout>
     </ScrollView>
 </ContentPage>
