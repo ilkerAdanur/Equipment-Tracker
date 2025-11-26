@@ -99,40 +99,45 @@
 
                                     <VerticalStackLayout Spacing="5">
 
-                                        <Grid ColumnDefinitions="*, Auto">
-                                            <HorizontalStackLayout Grid.Column="0" VerticalOptions="Center" BackgroundColor="Orange">
-                                                <HorizontalStackLayout.Triggers>
-                                                    <DataTrigger TargetType="HorizontalStackLayout" Binding="{Binding IsCancelled}" Value="True">
-                                                        <Setter Property="BackgroundColor" Value="Red" />
+                                        <Grid ColumnDefinitions="*, Auto" Margin="0,0,0,0">
+
+                                            <Grid Grid.Column="0" VerticalOptions="Fill" Padding="5,0">
+                                                <Grid.Triggers>
+                                                    <DataTrigger TargetType="Grid" Binding="{Binding IsCancelled}" Value="False">
+                                                        <Setter Property="BackgroundColor" Value="Orange" />
                                                     </DataTrigger>
-                                                </HorizontalStackLayout.Triggers>
+                                                    <DataTrigger TargetType="Grid" Binding="{Binding IsCancelled}" Value="True">
+                                                        <Setter Property="BackgroundColor" Value="#FF5252" />
+                                                    </DataTrigger>
+                                                </Grid.Triggers>
 
-                                                <Label Text="{Binding Name}" FontSize="Small" FontAttributes="Bold" TextColor="Black" Padding="5,0,0,0">
-                                                    <Label.GestureRecognizers>
-                                                        <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=CopyToClipboardCommand}" CommandParameter="{Binding Name}"/>
-                                                    </Label.GestureRecognizers>
-                                                </Label>
+                                                <HorizontalStackLayout VerticalOptions="Center" Spacing="5">
+                                                    <Label Text="{Binding Name}" FontSize="Small" FontAttributes="Bold" TextColor="Black">
+                                                        <Label.GestureRecognizers>
+                                                            <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=CopyToClipboardCommand}" CommandParameter="{Binding Name}"/>
+                                                        </Label.GestureRecognizers>
+                                                    </Label>
 
-                                                <Label Text="{Binding EquipmentCode, StringFormat=' ({0})'}" TextColor="Gray" FontSize="Small" FontAttributes="Bold">
-                                                    <Label.GestureRecognizers>
-                                                        <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=CopyToClipboardCommand}" CommandParameter="{Binding EquipmentCode}"/>
-                                                    </Label.GestureRecognizers>
-                                                </Label>
-                                            </HorizontalStackLayout>
+                                                    <Label Text="{Binding EquipmentCode, StringFormat='({0})'}" TextColor="#333333" FontSize="Small" FontAttributes="Bold">
+                                                        <Label.GestureRecognizers>
+                                                            <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=CopyToClipboardCommand}" CommandParameter="{Binding EquipmentCode}"/>
+                                                        </Label.GestureRecognizers>
+                                                    </Label>
+                                                </HorizontalStackLayout>
+                                            </Grid>
 
-                                            <HorizontalStackLayout Grid.Column="1" Spacing="5">
-                                                <Button Text="Dosya (+)" FontSize="Caption" HeightRequest="20" 
-                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=AddNewAttachmentCommand}" 
-                                                        CommandParameter="{Binding .}"/>
+                                            <HorizontalStackLayout Grid.Column="1" Spacing="5" Margin="5,0,0,0" VerticalOptions="Center">
+                                                <Button Text="Dosya (+)" FontSize="10" HeightRequest="30" Padding="5,0"
+                Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=AddNewAttachmentCommand}" 
+                CommandParameter="{Binding .}"/>
 
-                                                <Button Text="+" FontSize="Medium" WidthRequest="40" HeightRequest="20" 
-                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=AddNewPartCommand}" 
-                                                        CommandParameter="{Binding .}"/>
+                                                <Button Text="+" FontSize="Medium" WidthRequest="40" HeightRequest="30" Padding="0"
+                Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=AddNewPartCommand}" 
+                CommandParameter="{Binding .}"/>
 
-                                                <Button WidthRequest="70" HeightRequest="20" 
-                                                        Padding="0" FontSize="Micro" FontAttributes="Bold"
-                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=ToggleEquipmentStatusCommand}" 
-                                                        CommandParameter="{Binding .}">
+                                                <Button WidthRequest="70" HeightRequest="30" Padding="0" FontSize="10" FontAttributes="Bold"
+                Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=ToggleEquipmentStatusCommand}" 
+                CommandParameter="{Binding .}">
                                                     <Button.Triggers>
                                                         <DataTrigger TargetType="Button" Binding="{Binding IsCancelled}" Value="True">
                                                             <Setter Property="Text" Value="AKTİF ET" />
@@ -141,13 +146,14 @@
                                                         </DataTrigger>
                                                         <DataTrigger TargetType="Button" Binding="{Binding IsCancelled}" Value="False">
                                                             <Setter Property="Text" Value="İPTAL" />
-                                                            <Setter Property="BackgroundColor" Value="Orange" />
-                                                            <Setter Property="TextColor" Value="Black" />
+                                                            <Setter Property="BackgroundColor" Value="#D32F2F" />
+                                                            <Setter Property="TextColor" Value="White" />
                                                         </DataTrigger>
                                                     </Button.Triggers>
                                                 </Button>
                                             </HorizontalStackLayout>
                                         </Grid>
+                                        
 
                                         <BoxView HeightRequest="1" Color="{StaticResource Gray200}"/>
 
@@ -158,17 +164,20 @@
                                                 <DataTemplate x:DataType="models:EquipmentAttachment">
                                                     <Grid ColumnDefinitions="Auto, *, Auto, Auto" ColumnSpacing="5" Padding="0,2">
 
-                                                        <Grid Grid.Column="0" WidthRequest="125" HeightRequest="125">
-                                                            <VerticalStackLayout VerticalOptions="Center" HorizontalOptions="Center" IsVisible="{Binding IsProcessing}" Spacing="5">
+                                                        <Grid Grid.Column="0" WidthRequest="125" HeightRequest="125" BackgroundColor="Transparent">
+
+                                                            <Grid.GestureRecognizers>
+                                                                <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=OpenFileCommand}" 
+                                                                                 CommandParameter="{Binding FilePath}"/>
+                                                            </Grid.GestureRecognizers>
+
+                                                            <VerticalStackLayout VerticalOptions="Center" HorizontalOptions="Center" IsVisible="{Binding IsProcessing}" Spacing="5" ZIndex="2">
                                                                 <Label Text="İşleniyor..." FontSize="10" TextColor="Gray" HorizontalOptions="Center"/>
                                                                 <ProgressBar Progress="{Binding ProcessingProgress}" ProgressColor="{StaticResource Primary}" WidthRequest="100" HeightRequest="10"/>
                                                                 <Label Text="{Binding ProcessingProgress, StringFormat='{0:P0}'}" FontSize="10" TextColor="Gray" HorizontalOptions="Center"/>
                                                             </VerticalStackLayout>
 
                                                             <Image Source="{Binding ThumbnailPath}" Aspect="AspectFit" BackgroundColor="{StaticResource Gray100}" ZIndex="1">
-                                                                <Image.GestureRecognizers>
-                                                                    <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=OpenFileCommand}" CommandParameter="{Binding FilePath}"/>
-                                                                </Image.GestureRecognizers>
                                                                 <Image.Triggers>
                                                                     <DataTrigger TargetType="Image" Binding="{Binding IsProcessing}" Value="True">
                                                                         <Setter Property="IsVisible" Value="False" />
@@ -178,6 +187,22 @@
                                                                     </DataTrigger>
                                                                 </Image.Triggers>
                                                             </Image>
+
+                                                            <Label Text="Resim Yok" 
+                                                                   TextColor="Gray" 
+                                                                   FontSize="10" 
+                                                                   HorizontalOptions="Center" 
+                                                                   VerticalOptions="Center" 
+                                                                   ZIndex="0">
+                                                                <Label.Triggers>
+                                                                    <DataTrigger TargetType="Label" Binding="{Binding IsProcessing}" Value="True">
+                                                                        <Setter Property="IsVisible" Value="False"/>
+                                                                    </DataTrigger>
+                                                                    <DataTrigger TargetType="Label" Binding="{Binding ThumbnailPath, Converter={StaticResource IsNullOrEmptyStringConverter}}" Value="False">
+                                                                        <Setter Property="IsVisible" Value="False"/>
+                                                                    </DataTrigger>
+                                                                </Label.Triggers>
+                                                            </Label>
 
                                                         </Grid>
 

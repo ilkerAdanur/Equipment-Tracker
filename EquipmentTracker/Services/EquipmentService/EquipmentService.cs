@@ -23,17 +23,27 @@ namespace EquipmentTracker.Services.EquipmentService
             string basePath = Preferences.Get("attachment_path", defaultPath);
             return Path.Combine(basePath, "Attachments");
         }
-
-        private static string SanitizeFolderName(string name)
+        private string GetBaseDatabasePath()
         {
-            if (string.IsNullOrEmpty(name)) return "Unknown";
+            string defaultPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TrackerDatabase");
+            return Preferences.Get("attachment_path", defaultPath);
+        }
+        public async Task<List<Equipment>> GetEquipmentsByJobIdAsync(int jobId)
+        {
+            return await _context.Equipments
+                .Where(e => e.JobId == jobId)
+                .Include(e => e.Parts)
+                .Include(e => e.Attachments)
+                .ToListAsync();
+        }
 
-            // Windows dosya sisteminde yasaklı karakterleri temizle
-            foreach (char c in Path.GetInvalidFileNameChars())
-            {
-                name = name.Replace(c, '_');
-            }
-            return name.Trim();
+        private static string SanitizeFolderName(string folderName)
+        {
+            if (string.IsNullOrEmpty(folderName)) return "Unknown";
+
+            string sanitizedName = Regex.Replace(folderName, @"[\\/:*?""<>| ]", "_");
+
+            return Regex.Replace(sanitizedName, @"_+", "_").Trim('_');
         }
 
         // 2. Ana Metot (Ağ Yolu Entegrasyonu Yapıldı)
@@ -120,6 +130,8 @@ namespace EquipmentTracker.Services.EquipmentService
                 throw;
             }
         }
+       
+        
         public async Task ToggleEquipmentStatusAsync(int equipmentId, bool isCancelled)
         {
             var equipment = await _context.Equipments.FindAsync(equipmentId);

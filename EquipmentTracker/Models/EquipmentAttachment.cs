@@ -1,26 +1,24 @@
-﻿// Dosya: Models/EquipmentAttachment.cs
-using CommunityToolkit.Mvvm.ComponentModel;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 using System.ComponentModel.DataAnnotations.Schema;
-using System.Text.Json.Serialization;
 
 namespace EquipmentTracker.Models
 {
-
     public partial class EquipmentAttachment : ObservableObject
     {
         public int Id { get; set; }
         public string FileName { get; set; }
         public string FilePath { get; set; }
 
-        // DEĞİŞİKLİK BURADA: 'string' yanına '?' ekleyin
-        public string? ThumbnailPath { get; set; }
+        [ObservableProperty] 
+        private string _thumbnailPath;
 
         public int EquipmentId { get; set; }
-        [JsonIgnore]
         public Equipment Equipment { get; set; }
+
+        // UI Durumları
         [NotMapped]
         [ObservableProperty]
-        private bool _isProcessing; // İşlem devam ediyor mu?
+        private bool _isProcessing;
 
         [NotMapped]
         [ObservableProperty]

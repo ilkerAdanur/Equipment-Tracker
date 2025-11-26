@@ -315,11 +315,29 @@ namespace EquipmentTracker.ViewModels
         private async Task EnsureThumbnailExistsAsync(dynamic attachment, string localImagesBase, Equipment equip, EquipmentPart part = null)
         {
             string dbPath = attachment.ThumbnailPath;
+            string mainFilePath = attachment.FilePath; // Ana dosya yolunu al
 
-            // Yol yoksa veya zaten tam bir yerel yol ise ve dosya varsa işlem yapma
-            if (string.IsNullOrEmpty(dbPath) || (Path.IsPathRooted(dbPath) && File.Exists(dbPath))) return;
+            // EĞER: Yol doluysa VE yerel diskte dosya zaten varsa -> İŞLEM YAPMA (Zaten hazır)
+            if (!string.IsNullOrEmpty(dbPath) && Path.IsPathRooted(dbPath) && File.Exists(dbPath)) return;
 
-            string thumbName = Path.GetFileName(dbPath);
+            // EĞER: Yol boşsa AMA dosya DWG değilse -> İŞLEM YAPMA (Thumbnail gerekmez)
+            string extension = Path.GetExtension(mainFilePath)?.ToLower();
+            if (string.IsNullOrEmpty(dbPath) && extension != ".dwg" && extension != ".dxf") return;
+
+            // --- BURAYA GELDİYSEK YA YOL BOŞTUR (AMA DWG'DİR) YA DA DOSYA YERELDE YOKTUR ---
+
+            // İsimleri hazırla
+            string thumbName;
+            if (!string.IsNullOrEmpty(dbPath))
+            {
+                thumbName = Path.GetFileName(dbPath);
+            }
+            else
+            {
+                // DB'de yol yoksa, standart isimlendirmeyi varsayalım: "DosyaAdi_thumb.png"
+                thumbName = $"{Path.GetFileNameWithoutExtension(mainFilePath)}_thumb.png";
+            }
+
             string safeJobName = SanitizeFolderName(CurrentJob.JobName);
             string safeEquipName = SanitizeFolderName(equip.Name);
             string jobFolder = $"{CurrentJob.JobNumber}_{safeJobName}";
@@ -345,23 +363,23 @@ namespace EquipmentTracker.ViewModels
             // Dosya yerelde yoksa FTP'den indir
             if (!File.Exists(targetLocalPath))
             {
-                // Klasör yolu yoksa oluştur
                 string targetDir = Path.GetDirectoryName(targetLocalPath);
                 if (!Directory.Exists(targetDir)) Directory.CreateDirectory(targetDir);
 
                 await _ftpHelper.DownloadFileAsync(ftpPath, targetLocalPath);
             }
 
-            // Dosya varsa (veya yeni indiyse), modeldeki yolu yerel tam yolla güncelle
+            // Dosya varsa (veya yeni indiyse), modeldeki yolu güncelle
             if (File.Exists(targetLocalPath))
             {
                 MainThread.BeginInvokeOnMainThread(() =>
                 {
+                    // Dinamik tür olduğu için property'yi reflection veya cast ile set etmemiz gerekebilir
+                    // Ancak dynamic olduğu için direkt atama genellikle çalışır.
                     attachment.ThumbnailPath = targetLocalPath;
                 });
             }
         }
-
 
 
         // Arayüzün durumunu güncelleyen yardımcı metot
