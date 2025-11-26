@@ -116,5 +116,39 @@ namespace EquipmentTracker.Services
             string cleanSuffix = pathSuffix.Replace("\\", "/").TrimStart('/');
             return $"{baseHost}/{cleanSuffix}";
         }
+
+        public async Task RenameFileOrDirectoryAsync(string oldPathSuffix, string newPathSuffix)
+        {
+            if (string.IsNullOrEmpty(Host)) return;
+
+            try
+            {
+                // Eski yol (ftp://.../Attachments/EskiIsim)
+                string targetUrl = CombineFtpPath(oldPathSuffix);
+
+                FtpWebRequest request = (FtpWebRequest)WebRequest.Create(targetUrl);
+                request.Method = WebRequestMethods.Ftp.Rename;
+                request.Credentials = new NetworkCredential(User, Pass);
+
+                // PÜF NOKTASI: Bazı sunucular RenameTo için kök dizinden başlayan tam yol ister.
+                // newPathSuffix şuna benzemeli: "/public_html/Attachments/YeniIsim" veya sadece "Attachments/YeniIsim"
+                // Bizim CombineFtpPath metodu "ftp://" ekliyor, onu kullanmayacağız.
+                // Direkt parametre olarak gelen temiz yolu veriyoruz.
+                request.RenameTo = newPathSuffix;
+
+                using (var response = (FtpWebResponse)await request.GetResponseAsync())
+                {
+                    // Başarılı
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"FTP Rename Hatası: {ex.Message}");
+                // Hata olsa bile devam etsin, belki yeni klasör oluşturulup dosyalar oraya atılır
+            }
+        }
+
+
+
     }
 }

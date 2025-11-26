@@ -401,41 +401,79 @@ namespace EquipmentTracker.Services.Job
 
         public async Task UpdateJob(int jobId, JobModel newJob)
         {
-            // Klasör taşıma mantığı olan uzun metodunuz buraya gelecek (Değişiklik yok)
-            // Önceki adımlarda yazdığımız UpdateJob metodu aynen kalabilir.
-            var existingJob = await _context.Jobs.Include(j => j.Equipments).ThenInclude(e => e.Attachments).Include(j => j.Equipments).ThenInclude(e => e.Parts).ThenInclude(p => p.Attachments).FirstOrDefaultAsync(j => j.Id == jobId);
+            var existingJob = await _context.Jobs
+                .Include(j => j.Equipments).ThenInclude(e => e.Attachments)
+                .Include(j => j.Equipments).ThenInclude(e => e.Parts).ThenInclude(p => p.Attachments)
+                .FirstOrDefaultAsync(j => j.Id == jobId);
 
             if (existingJob != null)
             {
-                string baseAttachmentPath = GetCurrentAttachmentPath();
+                // 1. İsim Değişikliği Kontrolü
+                string baseAttachmentPath = await GetGlobalAttachmentPathAsync();
+
                 string oldSafeName = SanitizeFolderName(existingJob.JobName);
                 string oldFolderName = $"{existingJob.JobNumber}_{oldSafeName}";
-                string oldFullPath = Path.Combine(baseAttachmentPath, oldFolderName);
 
+                string newSafeName = SanitizeFolderName(newJob.JobName);
+                string newFolderName = $"{existingJob.JobNumber}_{newSafeName}";
+
+                bool nameChanged = !oldFolderName.Equals(newFolderName, StringComparison.OrdinalIgnoreCase);
+
+                // 2. Veritabanı Güncelleme
                 existingJob.JobName = newJob.JobName;
                 existingJob.JobOwner = newJob.JobOwner;
                 existingJob.JobDescription = newJob.JobDescription;
                 existingJob.Date = newJob.Date;
-
                 existingJob.IsCancelled = newJob.IsCancelled;
 
-                string newSafeName = SanitizeFolderName(newJob.JobName);
-                string newFolderName = $"{existingJob.JobNumber}_{newSafeName}";
-                string newFullPath = Path.Combine(baseAttachmentPath, newFolderName);
-
-                if (!oldFullPath.Equals(newFullPath, StringComparison.OrdinalIgnoreCase))
+                if (nameChanged)
                 {
+                    // A. Yerel Klasörü Taşı
+                    string oldFullPath = Path.Combine(baseAttachmentPath, oldFolderName);
+                    string newFullPath = Path.Combine(baseAttachmentPath, newFolderName);
+
                     if (Directory.Exists(oldFullPath))
                     {
                         try
                         {
-                            if (!Directory.Exists(newFullPath))
+                            if (!Directory.Exists(newFullPath)) Directory.Move(oldFullPath, newFullPath);
+                        }
+                        catch (Exception ex) { Debug.WriteLine($"Local Move Error: {ex.Message}"); }
+                    }
+
+                    // B. FTP Klasörünü Taşı (YENİ)
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            // Ana Klasörü Taşı
+                            await _ftpHelper.RenameFileOrDirectoryAsync($"Attachments/{oldFolderName}", $"Attachments/{newFolderName}");
+
+                            // Images Klasörünü Taşı (Thumbnails için)
+                            await _ftpHelper.RenameFileOrDirectoryAsync($"Attachments/Images/{oldFolderName}", $"Attachments/Images/{newFolderName}");
+                        }
+                        catch (Exception fex)
+                        {
+                            Debug.WriteLine($"FTP Rename Error: {fex.Message}");
+                        }
+                    });
+
+                    // C. Veritabanındaki Yolları Güncelle (String Replace ile)
+                    foreach (var eq in existingJob.Equipments)
+                    {
+                        foreach (var att in eq.Attachments)
+                        {
+                            if (!string.IsNullOrEmpty(att.FilePath)) att.FilePath = att.FilePath.Replace(oldFolderName, newFolderName);
+                            if (!string.IsNullOrEmpty(att.ThumbnailPath)) att.ThumbnailPath = att.ThumbnailPath.Replace(oldFolderName, newFolderName);
+                        }
+                        foreach (var part in eq.Parts)
+                        {
+                            foreach (var patt in part.Attachments)
                             {
-                                Directory.Move(oldFullPath, newFullPath);
-                                // Dosya yollarını güncelleme döngüleri buraya... (Önceki kodunuzdaki gibi)
+                                if (!string.IsNullOrEmpty(patt.FilePath)) patt.FilePath = patt.FilePath.Replace(oldFolderName, newFolderName);
+                                if (!string.IsNullOrEmpty(patt.ThumbnailPath)) patt.ThumbnailPath = patt.ThumbnailPath.Replace(oldFolderName, newFolderName);
                             }
                         }
-                        catch (Exception ex) { Debug.WriteLine($"Klasör hatası: {ex.Message}"); }
                     }
                 }
 
@@ -444,9 +482,8 @@ namespace EquipmentTracker.Services.Job
                     await _context.SaveChangesAsync();
                     _context.Entry(existingJob).State = EntityState.Detached;
                 }
-                catch (Exception ex) { Debug.WriteLine($"Update hatası: {ex.Message}"); throw; }
+                catch (Exception ex) { Debug.WriteLine($"Update Error: {ex.Message}"); throw; }
             }
-
         }
 
         public async Task ToggleJobStatusAsync(int jobId, bool isCancelled)

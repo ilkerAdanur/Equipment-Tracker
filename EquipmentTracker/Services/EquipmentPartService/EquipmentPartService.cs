@@ -100,6 +100,16 @@ namespace EquipmentTracker.Services.EquipmentPartService
                 throw;
             }
         }
+        public async Task TogglePartStatusAsync(int partId, bool isCancelled)
+        {
+            var part = await _context.EquipmentParts.FindAsync(partId);
+            if (part != null)
+            {
+                part.IsCancelled = isCancelled;
+                await _context.SaveChangesAsync();
+                _context.Entry(part).State = EntityState.Detached;
+            }
+        }
 
         // Eğer bu sınıfın içinde yoksa, bu yardımcı metodu da en alta ekleyin:
         private string SanitizeFolderName(string name)

@@ -1,10 +1,11 @@
 ﻿// Dosya: Models/EquipmentPart.cs
+using CommunityToolkit.Mvvm.ComponentModel;
 using System.Collections.ObjectModel;
 using System.Text.Json.Serialization;
 
 namespace EquipmentTracker.Models
 {
-    public class EquipmentPart
+    public partial class EquipmentPart : ObservableObject
     {
         public int Id { get; set; }
         public string PartId { get; set; }
@@ -15,6 +16,9 @@ namespace EquipmentTracker.Models
         public int EquipmentId { get; set; }
         [JsonIgnore]
         public Equipment Equipment { get; set; }
+
+        [ObservableProperty]
+        private bool _isCancelled;
 
         // YENİ EKLENEN ÖZELLİK:
         /// <summary>

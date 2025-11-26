@@ -171,8 +171,7 @@ namespace EquipmentTracker.Services.EquipmentPartAttachmentServices
             }
         }
 
-
-        public async Task<EquipmentPartAttachment> AddAttachmentAsync(JobModel parentJob, Equipment parentEquipment, EquipmentPart parentPart, FileResult fileToCopy)
+        public async Task<EquipmentPartAttachment> UpdateAttachmentAsync(EquipmentPartAttachment existingAttachment, JobModel parentJob, Equipment parentEquipment, EquipmentPart parentPart, FileResult newFile)
         {
             // 1. Klasörleri Hazırla
             string dbPath = GetBaseDatabasePath();
@@ -189,34 +188,94 @@ namespace EquipmentTracker.Services.EquipmentPartAttachmentServices
             string targetDirectory = Path.Combine(baseAttachmentPath, jobFolder, equipFolder, partFolder);
             if (!Directory.Exists(targetDirectory)) Directory.CreateDirectory(targetDirectory);
 
-            // 2. İsim Çakışmasını Önle
-            string uniqueFilePath = GetUniqueFilePath(targetDirectory, fileToCopy.FileName);
-            string uniqueFileName = Path.GetFileName(uniqueFilePath);
-
-            // 3. Dosyayı Kopyala
-            using (var sourceStream = await fileToCopy.OpenReadAsync())
-            using (var targetStream = File.Create(uniqueFilePath))
+            // 2. Eski Dosyayı Sil
+            string oldLocalPath = "";
+            if (!string.IsNullOrEmpty(existingAttachment.FilePath))
             {
-                await sourceStream.CopyToAsync(targetStream);
+                string relativePath = existingAttachment.FilePath.Replace("/", Path.DirectorySeparatorChar.ToString());
+                oldLocalPath = Path.Combine(dbPath, relativePath);
             }
 
-            // 4. Veritabanına Kaydet
+            if (File.Exists(oldLocalPath))
+            {
+                try { File.Delete(oldLocalPath); } catch { }
+            }
+            if (!string.IsNullOrEmpty(existingAttachment.ThumbnailPath) && File.Exists(existingAttachment.ThumbnailPath))
+            {
+                try { File.Delete(existingAttachment.ThumbnailPath); } catch { }
+            }
+
+            // 3. Yeni Dosyayı Kaydet
+            string uniqueFilePath = GetUniqueFilePath(targetDirectory, newFile.FileName);
+            string uniqueFileName = Path.GetFileName(uniqueFilePath);
+
+            using (var stream = await newFile.OpenReadAsync())
+            using (var dest = File.Create(uniqueFilePath)) { await stream.CopyToAsync(dest); }
+
+            // 4. Veritabanı Kaydını Güncelle
+            string ftpRelativePath = $"Attachments/{jobFolder}/{equipFolder}/{partFolder}/{uniqueFileName}";
+
+            existingAttachment.FileName = uniqueFileName;
+            existingAttachment.FilePath = ftpRelativePath;
+            existingAttachment.ThumbnailPath = null;
+            existingAttachment.IsProcessing = true;
+            existingAttachment.ProcessingProgress = 0;
+
+            _context.EquipmentPartAttachments.Update(existingAttachment);
+            await _context.SaveChangesAsync();
+            _context.Entry(existingAttachment).State = EntityState.Detached;
+
+            // 5. Arka Plan İşlemini Başlat
+            _ = Task.Run(() => ProcessPartAttachmentInBackground(existingAttachment, uniqueFilePath, ftpRelativePath, parentJob, parentEquipment, parentPart));
+
+            return existingAttachment;
+        }
+        public async Task<EquipmentPartAttachment> AddAttachmentAsync(JobModel parentJob, Equipment parentEquipment, EquipmentPart parentPart, FileResult fileToCopy)
+        {
+            string safeJobName = SanitizeFolderName(parentJob.JobName);
+            string safeEquipName = SanitizeFolderName(parentEquipment.Name);
+            string safePartName = SanitizeFolderName(parentPart.Name);
+
+            string jobFolder = $"{parentJob.JobNumber}_{safeJobName}";
+            string equipFolder = $"{parentJob.JobNumber}_{parentEquipment.EquipmentId}_{safeEquipName}";
+            string partFolder = $"{parentJob.JobNumber}_{parentEquipment.EquipmentId}_{parentPart.PartId}_{safePartName}";
+
+            string localTargetDir;
+            if (App.CurrentUser?.IsAdmin ?? false) // Admin Kontrolü
+            {
+                string dbPath = GetBaseDatabasePath();
+                localTargetDir = Path.Combine(dbPath, "Attachments", jobFolder, equipFolder, partFolder);
+            }
+            else
+            {
+                localTargetDir = Path.Combine(FileSystem.CacheDirectory, "TempUploads");
+            }
+
+            if (!Directory.Exists(localTargetDir)) Directory.CreateDirectory(localTargetDir);
+
+            string uniqueFilePath = GetUniqueFilePath(localTargetDir, fileToCopy.FileName);
+            string uniqueFileName = Path.GetFileName(uniqueFilePath);
+
+            using (var stream = await fileToCopy.OpenReadAsync())
+            using (var dest = File.Create(uniqueFilePath)) { await stream.CopyToAsync(dest); }
+
+            // RELATIVE PATH
+            string ftpRelativePath = $"Attachments/{jobFolder}/{equipFolder}/{partFolder}/{uniqueFileName}";
+
             var newAttachment = new EquipmentPartAttachment
             {
                 FileName = uniqueFileName,
-                FilePath = uniqueFilePath,
+                FilePath = ftpRelativePath, // DB'ye Hostinger yolu
                 ThumbnailPath = null,
                 EquipmentPartId = parentPart.Id,
-                IsProcessing = true,
-                ProcessingProgress = 0
+                IsProcessing = true
             };
 
             _context.EquipmentPartAttachments.Add(newAttachment);
             await _context.SaveChangesAsync();
             _context.Entry(newAttachment).State = EntityState.Detached;
 
-            // 5. Arka Plan İşlemini Başlat
-            _ = Task.Run(() => ProcessPartAttachmentInBackground(newAttachment, uniqueFilePath, parentJob, parentEquipment, parentPart));
+            _ = Task.Run(() => ProcessPartAttachmentInBackground(newAttachment, uniqueFilePath, ftpRelativePath, parentJob, parentEquipment, parentPart));
 
             return newAttachment;
         }
@@ -253,8 +312,15 @@ namespace EquipmentTracker.Services.EquipmentPartAttachmentServices
             }
         }
 
-        private async Task ProcessPartAttachmentInBackground(EquipmentPartAttachment attachment, string sourceLocalPath, JobModel job, Equipment equip, EquipmentPart part)
+        private async Task ProcessPartAttachmentInBackground(EquipmentPartAttachment attachment, string sourceLocalPath, string ftpRelativePath, JobModel job, Equipment equip, EquipmentPart part)
         {
+            // GÜVENLİK KONTROLÜ: Nesnelerden biri eksikse işlemi durdur (Çökmeyi önler)
+            if (job == null || equip == null || part == null)
+            {
+                System.Diagnostics.Debug.WriteLine("HATA: Arka plan işleminde Job, Equipment veya Part nesnesi NULL geldi.");
+                return;
+            }
+
             attachment.IsProcessing = true;
             attachment.ProcessingProgress = 0.0;
 
@@ -263,50 +329,47 @@ namespace EquipmentTracker.Services.EquipmentPartAttachmentServices
                 var dbContext = scope.ServiceProvider.GetRequiredService<DataContext>();
                 try
                 {
-                    // Klasör Adları
-                    string safeJobName = SanitizeFolderName(job.JobName);
-                    string safeEquipName = SanitizeFolderName(equip.Name);
-                    string safePartName = SanitizeFolderName(part.Name);
+                    // 1. FTP Yolunu Ayrıştır
+                    string ftpFolderPath = Path.GetDirectoryName(ftpRelativePath).Replace("\\", "/");
 
-                    string jobFolder = $"{job.JobNumber}_{safeJobName}";
-                    string equipFolder = $"{job.JobNumber}_{equip.EquipmentId}_{safeEquipName}";
-                    string partFolder = $"{job.JobNumber}_{equip.EquipmentId}_{part.PartId}_{safePartName}";
-
-                    string ftpFolderPath = $"Attachments/{jobFolder}/{equipFolder}/{partFolder}";
-
-                    // 1. FTP YÜKLEME (Ana Dosya) - %60
+                    // --- A. FTP YÜKLEME (ANA DOSYA) ---
                     var uploadProgress = new Progress<double>(percent =>
                     {
                         MainThread.BeginInvokeOnMainThread(() => attachment.ProcessingProgress = percent * 0.6);
                     });
 
                     // Klasörleri Oluştur
-                    await _ftpHelper.CreateDirectoryAsync("Attachments");
-                    await _ftpHelper.CreateDirectoryAsync($"Attachments/{jobFolder}");
-                    await _ftpHelper.CreateDirectoryAsync($"Attachments/{jobFolder}/{equipFolder}");
-                    await _ftpHelper.CreateDirectoryAsync(ftpFolderPath);
+                    var folders = ftpFolderPath.Split('/');
+                    string currentPath = "";
+                    foreach (var folder in folders)
+                    {
+                        if (string.IsNullOrEmpty(folder)) continue;
+                        currentPath = string.IsNullOrEmpty(currentPath) ? folder : $"{currentPath}/{folder}";
+                        await _ftpHelper.CreateDirectoryAsync(currentPath);
+                    }
 
-                    // Yükle
+                    // Dosyayı Yükle
                     await _ftpHelper.UploadFileWithProgressAsync(sourceLocalPath, ftpFolderPath, uploadProgress);
 
-                    // 2. THUMBNAIL (DWG/DXF ise)
+                    // --- B. THUMBNAIL (DWG/DXF İSE) ---
                     string extension = Path.GetExtension(sourceLocalPath).ToLower();
                     if (extension == ".dwg" || extension == ".dxf")
                     {
                         MainThread.BeginInvokeOnMainThread(() => attachment.ProcessingProgress = 0.65);
 
-                        // Yerel Images Klasörü
-                        string dbPath = GetBaseDatabasePath();
-                        string baseImagesPath = Path.Combine(dbPath, "Attachments", "Images");
-                        string localImageDir = Path.Combine(baseImagesPath, jobFolder, equipFolder, partFolder);
+                        // İsimleri Hazırla (Burada artık null hatası almazsınız)
+                        string safeJobName = SanitizeFolderName(job.JobName);
+                        string safeEquipName = SanitizeFolderName(equip.Name);
+                        string safePartName = SanitizeFolderName(part.Name);
 
-                        if (!Directory.Exists(localImageDir)) Directory.CreateDirectory(localImageDir);
+                        string thumbName = $"{Path.GetFileNameWithoutExtension(sourceLocalPath)}_thumb.png";
 
-                        string cleanFileName = Path.GetFileNameWithoutExtension(Path.GetFileName(sourceLocalPath));
-                        string thumbName = $"{cleanFileName}_thumb.png";
-                        string targetThumbPath = Path.Combine(localImageDir, thumbName);
+                        string ftpImagesPath = $"Attachments/Images/{job.JobNumber}_{safeJobName}/{job.JobNumber}_{equip.EquipmentId}_{safeEquipName}/{job.JobNumber}_{equip.EquipmentId}_{part.PartId}_{safePartName}";
+                        string ftpThumbFullPath = $"{ftpImagesPath}/{thumbName}";
 
-                        // Resim Oluştur
+                        // Geçici Thumbnail
+                        string tempThumbPath = Path.Combine(FileSystem.CacheDirectory, thumbName);
+
                         await Task.Run(() =>
                         {
                             using (Aspose.CAD.Image cadImage = Aspose.CAD.Image.Load(sourceLocalPath))
@@ -319,7 +382,7 @@ namespace EquipmentTracker.Services.EquipmentPartAttachmentServices
                                     BackgroundColor = Aspose.CAD.Color.White,
                                     DrawType = Aspose.CAD.FileFormats.Cad.CadDrawTypeMode.UseObjectColor
                                 };
-                                cadImage.Save(targetThumbPath, new PngOptions { VectorRasterizationOptions = rasterizationOptions });
+                                cadImage.Save(tempThumbPath, new PngOptions { VectorRasterizationOptions = rasterizationOptions });
                             }
                         });
 
@@ -327,23 +390,39 @@ namespace EquipmentTracker.Services.EquipmentPartAttachmentServices
                         var dbRecord = await dbContext.EquipmentPartAttachments.FindAsync(attachment.Id);
                         if (dbRecord != null)
                         {
-                            dbRecord.ThumbnailPath = targetThumbPath;
+                            dbRecord.ThumbnailPath = ftpThumbFullPath; // Sunucu yolu
                             await dbContext.SaveChangesAsync();
                         }
+                        MainThread.BeginInvokeOnMainThread(() =>
+                        {
+                            attachment.ThumbnailPath = tempThumbPath;
+                        });
 
                         // FTP'ye Resim Yükle
                         MainThread.BeginInvokeOnMainThread(() => attachment.ProcessingProgress = 0.8);
 
-                        string ftpThumbFolder = $"Attachments/Images/{jobFolder}/{equipFolder}/{partFolder}";
                         await _ftpHelper.CreateDirectoryAsync("Attachments/Images");
-                        await _ftpHelper.CreateDirectoryAsync($"Attachments/Images/{jobFolder}");
-                        await _ftpHelper.CreateDirectoryAsync($"Attachments/Images/{jobFolder}/{equipFolder}");
-                        await _ftpHelper.CreateDirectoryAsync(ftpThumbFolder);
+                        string[] imgFolders = ftpImagesPath.Replace("Attachments/Images/", "").Split('/');
+                        string currentImgPath = "Attachments/Images";
+                        foreach (var f in imgFolders) { currentImgPath += $"/{f}"; await _ftpHelper.CreateDirectoryAsync(currentImgPath); }
 
-                        await _ftpHelper.UploadFileAsync(targetThumbPath, ftpThumbFolder);
+                        await _ftpHelper.UploadFileAsync(tempThumbPath, ftpImagesPath);
 
-                        // UI Güncelle
-                        MainThread.BeginInvokeOnMainThread(() => attachment.ThumbnailPath = targetThumbPath);
+                        // UI GÜNCELLEME: Resmi hemen göster
+                        MainThread.BeginInvokeOnMainThread(() =>
+                        {
+                            attachment.ThumbnailPath = tempThumbPath;
+                            // Resmi tetiklemek için null yapıp tekrar ata (Trick)
+                            // attachment.ThumbnailPath = null;
+                            // attachment.ThumbnailPath = tempThumbPath;
+                        });
+                    }
+
+                    // --- C. TEMİZLİK ---
+                    bool isAdmin = App.CurrentUser?.IsAdmin ?? false;
+                    if (!isAdmin && File.Exists(sourceLocalPath))
+                    {
+                        File.Delete(sourceLocalPath);
                     }
 
                     MainThread.BeginInvokeOnMainThread(() => attachment.ProcessingProgress = 1.0);

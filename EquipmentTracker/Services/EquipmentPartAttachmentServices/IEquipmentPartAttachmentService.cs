@@ -8,5 +8,6 @@ namespace EquipmentTracker.Services.EquipmentPartAttachmentServices
         Task OpenAttachmentAsync(EquipmentPartAttachment attachment);
         Task DeleteAttachmentAsync(EquipmentPartAttachment attachment);
         Task DeletePartAttachmentRecordAsync(int attachmentId);
+        Task<EquipmentPartAttachment> UpdateAttachmentAsync(EquipmentPartAttachment existingAttachment, JobModel parentJob, Equipment parentEquipment, EquipmentPart parentPart, FileResult newFile);
     }
 }

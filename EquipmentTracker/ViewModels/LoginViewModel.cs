@@ -55,6 +55,11 @@ namespace EquipmentTracker.ViewModels
                     // BAŞARILI
                     App.CurrentUser = user;
 
+                    if (Application.Current is App app)
+                    {
+                        app.StartSessionCheck();
+                    }
+
                     // --- YENİ: EĞER ADMİN İSE SENKRONİZASYONU BAŞLAT ---
                     if (user.IsAdmin)
                     {

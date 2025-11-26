@@ -404,6 +404,10 @@ namespace EquipmentTracker.ViewModels
         {
             bool answer = await ShowConfirmAsync("Çıkış", "Oturumu kapatmak istiyor musunuz?");
             if (!answer) return;
+            if (Application.Current is App app)
+            {
+                app.StopSessionCheck();
+            }
 
             if (App.CurrentUser != null)
             {

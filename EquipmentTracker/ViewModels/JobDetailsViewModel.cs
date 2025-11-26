@@ -153,11 +153,11 @@ namespace EquipmentTracker.ViewModels
 
                 if (CurrentJob != null)
                 {
-                    // KRİTİK: Dosya silme kontrolünü devre dışı bırakıyoruz!
-                    // await CheckAttachmentsIntegrityAsync(); <--- BU SATIRI SİLİN VEYA YORUMA ALIN
 
-                    // Onun yerine eksik resimleri indiriyoruz
-                    _ = Task.Run(DownloadThumbnailsForCurrentJob);
+                    if (IsAdminUser)
+                    {
+                        _ = Task.Run(DownloadThumbnailsForCurrentJob);
+                    }
 
                     JobNameDisplay = new CopyableTextViewModel(CurrentJob.JobName);
                     JobOwnerDisplay = new CopyableTextViewModel(CurrentJob.JobOwner);
@@ -169,78 +169,200 @@ namespace EquipmentTracker.ViewModels
                     Title = "Detay Bulunamadı";
                 }
             }
+            catch (Exception ex)
+            {
+                await Shell.Current.DisplayAlert("Hata", "İş detayları yüklenemedi: " + ex.Message, "Tamam");
+            }
             finally
             {
                 IsBusy = false;
             }
         }
+
+        [RelayCommand]
+        async Task UpdateAttachment(EquipmentAttachment attachment)
+        {
+            if (attachment == null || CurrentJob == null) return;
+            if (!IsAdminUser) return; // Sadece Admin
+
+            try
+            {
+                // Dosya seç
+                var fileResult = await FilePicker.Default.PickAsync(new PickOptions
+                {
+                    PickerTitle = "Yeni dosyayı seçin (Eskisi ile değiştirilecek)"
+                });
+
+                if (fileResult == null) return;
+
+                if (IsBusy) return;
+                IsBusy = true;
+
+                // Ekipmanı bul (Parent bilgisi için)
+                var parentEquipment = CurrentJob.Equipments.FirstOrDefault(e => e.Attachments.Contains(attachment));
+                if (parentEquipment == null) return;
+
+                // Servisi çağır
+                await _attachmentService.UpdateAttachmentAsync(attachment, CurrentJob, parentEquipment, fileResult);
+
+                // UI otomatik güncellenir çünkü attachment nesnesi ObservableObject
+            }
+            catch (Exception ex)
+            {
+                await Shell.Current.DisplayAlert("Hata", $"Güncelleme hatası: {ex.Message}", "Tamam");
+            }
+            finally
+            {
+                IsBusy = false;
+            }
+        }
+
+        // PARÇA DOSYASI GÜNCELLEME
+        [RelayCommand]
+        async Task UpdatePartAttachment(EquipmentPartAttachment attachment)
+        {
+            if (attachment == null || CurrentJob == null) return;
+            if (!IsAdminUser) return;
+
+            try
+            {
+                var fileResult = await FilePicker.Default.PickAsync(new PickOptions
+                {
+                    PickerTitle = "Yeni dosyayı seçin (Eskisi ile değiştirilecek)"
+                });
+
+                if (fileResult == null) return;
+
+                if (IsBusy) return;
+                IsBusy = true;
+
+                // Parçayı ve Ekipmanı bul
+                Equipment parentEquipment = null;
+                EquipmentPart parentPart = null;
+
+                foreach (var eq in CurrentJob.Equipments)
+                {
+                    var part = eq.Parts.FirstOrDefault(p => p.Attachments.Contains(attachment));
+                    if (part != null)
+                    {
+                        parentEquipment = eq;
+                        parentPart = part;
+                        break;
+                    }
+                }
+
+                if (parentEquipment == null || parentPart == null) return;
+
+                await _equipmentPartAttachmentService.UpdateAttachmentAsync(attachment, CurrentJob, parentEquipment, parentPart, fileResult);
+            }
+            catch (Exception ex)
+            {
+                await Shell.Current.DisplayAlert("Hata", $"Güncelleme hatası: {ex.Message}", "Tamam");
+            }
+            finally
+            {
+                IsBusy = false;
+            }
+        }
+        public bool IsAdminUser => App.CurrentUser?.IsAdmin ?? false;
         private async Task DownloadThumbnailsForCurrentJob()
         {
             if (CurrentJob == null) return;
 
             try
             {
-                // Yerel Yolu Bul
-                string basePath = Preferences.Get("attachment_path", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TrackerDatabase"));
-                string baseImagesPath = Path.Combine(basePath, "Attachments", "Images");
+                // 1. Yerel "Images" Klasörünün Yolunu Bul
+                string localImagesBase;
+                if (IsAdminUser)
+                {
+                    // Admin: Kalıcı Klasör
+                    string savedPath = Preferences.Get("attachment_path", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TrackerDatabase"));
+                    localImagesBase = Path.Combine(savedPath, "Attachments", "Images");
+                }
+                else
+                {
+                    // User: Geçici Klasör (Cache)
+                    localImagesBase = Path.Combine(FileSystem.CacheDirectory, "Images");
+                }
 
-                string safeJobName = SanitizeFolderName(CurrentJob.JobName);
-                string jobFolder = $"{CurrentJob.JobNumber}_{safeJobName}";
+                if (!Directory.Exists(localImagesBase)) Directory.CreateDirectory(localImagesBase);
 
-                // 1. Ekipman Resimleri
+                // 2. Tüm Ekipman ve Parça Resimlerini Kontrol Et
                 foreach (var equip in CurrentJob.Equipments)
                 {
+                    // A. Ekipman Resimleri
                     foreach (var att in equip.Attachments)
                     {
-                        if (string.IsNullOrEmpty(att.ThumbnailPath)) continue;
-
-                        string thumbName = Path.GetFileName(att.ThumbnailPath);
-                        string safeEquipName = SanitizeFolderName(equip.Name);
-                        string equipFolder = $"{CurrentJob.JobNumber}_{equip.EquipmentId}_{safeEquipName}";
-
-                        string localPath = Path.Combine(baseImagesPath, jobFolder, equipFolder, thumbName);
-
-                        // Dosya yoksa indir
-                        if (!File.Exists(localPath))
-                        {
-                            string ftpPath = $"Attachments/Images/{jobFolder}/{equipFolder}/{thumbName}";
-                            await _ftpHelper.DownloadFileAsync(ftpPath, localPath);
-
-                            // UI Güncelle (Eğer path değiştiyse)
-                            if (att.ThumbnailPath != localPath)
-                            {
-                                att.ThumbnailPath = localPath; // Geçici olarak view için güncelle
-                            }
-                        }
+                        await EnsureThumbnailExistsAsync(att, localImagesBase, equip);
                     }
 
-                    // 2. Parça Resimleri
+                    // B. Parça Resimleri
                     foreach (var part in equip.Parts)
                     {
                         foreach (var patt in part.Attachments)
                         {
-                            if (string.IsNullOrEmpty(patt.ThumbnailPath)) continue;
-
-                            string thumbName = Path.GetFileName(patt.ThumbnailPath);
-                            string safeEquipName = SanitizeFolderName(equip.Name);
-                            string safePartName = SanitizeFolderName(part.Name);
-                            string equipFolder = $"{CurrentJob.JobNumber}_{equip.EquipmentId}_{safeEquipName}";
-                            string partFolder = $"{CurrentJob.JobNumber}_{equip.EquipmentId}_{part.PartId}_{safePartName}";
-
-                            string localPath = Path.Combine(baseImagesPath, jobFolder, equipFolder, partFolder, thumbName);
-
-                            if (!File.Exists(localPath))
-                            {
-                                string ftpPath = $"Attachments/Images/{jobFolder}/{equipFolder}/{partFolder}/{thumbName}";
-                                await _ftpHelper.DownloadFileAsync(ftpPath, localPath);
-                                if (patt.ThumbnailPath != localPath) patt.ThumbnailPath = localPath;
-                            }
+                            await EnsureThumbnailExistsAsync(patt, localImagesBase, equip, part);
                         }
                     }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Resim İndirme Hatası: {ex.Message}");
+            }
         }
+
+        private async Task EnsureThumbnailExistsAsync(dynamic attachment, string localImagesBase, Equipment equip, EquipmentPart part = null)
+        {
+            string dbPath = attachment.ThumbnailPath;
+
+            // Yol yoksa veya zaten tam bir yerel yol ise ve dosya varsa işlem yapma
+            if (string.IsNullOrEmpty(dbPath) || (Path.IsPathRooted(dbPath) && File.Exists(dbPath))) return;
+
+            string thumbName = Path.GetFileName(dbPath);
+            string safeJobName = SanitizeFolderName(CurrentJob.JobName);
+            string safeEquipName = SanitizeFolderName(equip.Name);
+            string jobFolder = $"{CurrentJob.JobNumber}_{safeJobName}";
+            string equipFolder = $"{CurrentJob.JobNumber}_{equip.EquipmentId}_{safeEquipName}";
+
+            string ftpPath, targetLocalPath;
+
+            if (part == null)
+            {
+                // Ekipman Resmi
+                ftpPath = $"Attachments/Images/{jobFolder}/{equipFolder}/{thumbName}";
+                targetLocalPath = Path.Combine(localImagesBase, jobFolder, equipFolder, thumbName);
+            }
+            else
+            {
+                // Parça Resmi
+                string safePartName = SanitizeFolderName(part.Name);
+                string partFolder = $"{CurrentJob.JobNumber}_{equip.EquipmentId}_{part.PartId}_{safePartName}";
+                ftpPath = $"Attachments/Images/{jobFolder}/{equipFolder}/{partFolder}/{thumbName}";
+                targetLocalPath = Path.Combine(localImagesBase, jobFolder, equipFolder, partFolder, thumbName);
+            }
+
+            // Dosya yerelde yoksa FTP'den indir
+            if (!File.Exists(targetLocalPath))
+            {
+                // Klasör yolu yoksa oluştur
+                string targetDir = Path.GetDirectoryName(targetLocalPath);
+                if (!Directory.Exists(targetDir)) Directory.CreateDirectory(targetDir);
+
+                await _ftpHelper.DownloadFileAsync(ftpPath, targetLocalPath);
+            }
+
+            // Dosya varsa (veya yeni indiyse), modeldeki yolu yerel tam yolla güncelle
+            if (File.Exists(targetLocalPath))
+            {
+                MainThread.BeginInvokeOnMainThread(() =>
+                {
+                    attachment.ThumbnailPath = targetLocalPath;
+                });
+            }
+        }
+
+
 
         // Arayüzün durumunu güncelleyen yardımcı metot
         private void UpdateApprovalStatus()
@@ -656,7 +778,7 @@ namespace EquipmentTracker.ViewModels
                 // CurrentJob, UI'dan gelen güncel verileri tutar.
                 await _jobService.UpdateJob(CurrentJob.Id, CurrentJob);
 
-                await Shell.Current.DisplayAlert("Başarılı", "İş detayları güncellendi.", "Tamam");
+                await Shell.Current.DisplayAlert("Başarılı", "İş bilgileri güncellendi.", "Tamam");
             }
             catch (Exception ex)
             {
@@ -959,94 +1081,33 @@ namespace EquipmentTracker.ViewModels
             }
         }
 
-
         [RelayCommand]
-        async Task OpenFile(string filePath) // Bu komut XAML'de Image TapGesture'a bağlı, parametre olarak FilePath geliyor
+        async Task TogglePartStatus(EquipmentPart part)
         {
-            if (string.IsNullOrWhiteSpace(filePath) || CurrentJob == null) return;
+            if (part == null) return;
+
+            string actionName = part.IsCancelled ? "AKTİF ETMEK" : "İPTAL ETMEK";
+            bool confirmed = await Shell.Current.DisplayAlert("Parça Durumu",
+                $"'{part.Name}' parçasını {actionName} istiyor musunuz?", "Evet", "Vazgeç");
+
+            if (!confirmed) return;
+
+            if (IsBusy) return;
+            IsBusy = true;
 
             try
             {
-                // 1. Yerel Kontrol
-                if (File.Exists(filePath))
-                {
-                    await Launcher.OpenAsync(new OpenFileRequest { File = new ReadOnlyFile(filePath) });
-                    return;
-                }
+                bool newStatus = !part.IsCancelled;
 
-                // 2. Dosya yoksa indirmeyi dene
-                bool answer = await Shell.Current.DisplayAlert("Dosya İndir", "Dosya cihazınızda bulunamadı. Sunucudan indirmek ister misiniz?", "Evet", "Hayır");
-                if (!answer) return;
+                // Servisi çağır
+                await _partService.TogglePartStatusAsync(part.Id, newStatus);
 
-                if (IsBusy) return;
-                IsBusy = true; 
-
-                // 3. FTP Yolunu ve Hedef Yolu Bul
-                string fileName = Path.GetFileName(filePath);
-
-                string remotePath = "";
-                string targetLocalPath = "";
-
-                string basePath = Preferences.Get("attachment_path", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TrackerDatabase"));
-                basePath = Path.Combine(basePath, "Attachments");
-                string safeJobName = SanitizeFolderName(CurrentJob.JobName);
-                string jobFolder = $"{CurrentJob.JobNumber}_{safeJobName}";
-
-                bool found = false;
-
-                // A. Ekipmanlarda Ara
-                foreach (var eq in CurrentJob.Equipments)
-                {
-                    if (eq.Attachments.Any(a => Path.GetFileName(a.FilePath) == fileName))
-                    {
-                        string safeEquipName = SanitizeFolderName(eq.Name);
-                        string equipFolder = $"{CurrentJob.JobNumber}_{eq.EquipmentId}_{safeEquipName}";
-
-                        remotePath = $"Attachments/{jobFolder}/{equipFolder}/{fileName}";
-                        targetLocalPath = Path.Combine(basePath, jobFolder, equipFolder, fileName);
-                        found = true;
-                        break;
-                    }
-                    // B. Parçalarda Ara
-                    foreach (var part in eq.Parts)
-                    {
-                        if (part.Attachments.Any(a => Path.GetFileName(a.FilePath) == fileName))
-                        {
-                            string safeEquipName = SanitizeFolderName(eq.Name);
-                            string safePartName = SanitizeFolderName(part.Name);
-                            string equipFolder = $"{CurrentJob.JobNumber}_{eq.EquipmentId}_{safeEquipName}";
-                            string partFolder = $"{CurrentJob.JobNumber}_{eq.EquipmentId}_{part.PartId}_{safePartName}";
-
-                            remotePath = $"Attachments/{jobFolder}/{equipFolder}/{partFolder}/{fileName}";
-                            targetLocalPath = Path.Combine(basePath, jobFolder, equipFolder, partFolder, fileName);
-                            found = true;
-                            break;
-                        }
-                    }
-                    if (found) break;
-                }
-
-                if (found)
-                {
-                    await _ftpHelper.DownloadFileAsync(remotePath, targetLocalPath);
-
-                    if (File.Exists(targetLocalPath))
-                    {
-                        await Launcher.OpenAsync(new OpenFileRequest { File = new ReadOnlyFile(targetLocalPath) });
-                    }
-                    else
-                    {
-                        await Shell.Current.DisplayAlert("Hata", "Dosya sunucudan indirilemedi.", "Tamam");
-                    }
-                }
-                else
-                {
-                    await Shell.Current.DisplayAlert("Hata", "Dosya konumu veritabanında bulunamadı.", "Tamam");
-                }
+                // UI güncelle
+                part.IsCancelled = newStatus;
             }
             catch (Exception ex)
             {
-                await Shell.Current.DisplayAlert("Hata", $"Dosya açılırken hata: {ex.Message}", "Tamam");
+                await Shell.Current.DisplayAlert("Hata", ex.Message, "Tamam");
             }
             finally
             {
@@ -1055,5 +1116,68 @@ namespace EquipmentTracker.ViewModels
         }
 
 
+        [RelayCommand]
+        async Task OpenFile(string dbFilePath) // DB'den gelen Relative Path (Attachments/...)
+        {
+            if (string.IsNullOrWhiteSpace(dbFilePath)) return;
+
+            try
+            {
+                string fileName = Path.GetFileName(dbFilePath);
+                string localFullPath = "";
+
+                if (IsAdminUser)
+                {
+                    // ADMIN: Gerçek yerel yolu oluştur
+                    // dbFilePath zaten "Attachments\Klasör\Dosya" formatında (veya /)
+                    string basePath = Preferences.Get("attachment_path", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TrackerDatabase"));
+
+                    // Path.Combine platforma göre / veya \ düzeltir
+                    localFullPath = Path.Combine(basePath, dbFilePath.Replace("/", Path.DirectorySeparatorChar.ToString()));
+                }
+                else
+                {
+                    // USER: Cache klasörü
+                    localFullPath = Path.Combine(FileSystem.CacheDirectory, fileName);
+                }
+
+                // 1. Dosya var mı?
+                if (File.Exists(localFullPath))
+                {
+                    await Launcher.OpenAsync(new OpenFileRequest { File = new ReadOnlyFile(localFullPath) });
+                    return;
+                }
+
+                // 2. Yoksa İndir
+                bool answer = await Shell.Current.DisplayAlert("İndir", "Dosya cihazda yok. İndirilsin mi?", "Evet", "Hayır");
+                if (!answer) return;
+
+                if (IsBusy) return;
+                IsBusy = true;
+
+                try
+                {
+                    // dbFilePath zaten FTP yolu formatında (Attachments/...)
+                    // Sadece ters slashları düze çevirelim garanti olsun
+                    string ftpPath = dbFilePath.Replace("\\", "/");
+
+                    await _ftpHelper.DownloadFileAsync(ftpPath, localFullPath);
+
+                    if (File.Exists(localFullPath))
+                    {
+                        await Launcher.OpenAsync(new OpenFileRequest { File = new ReadOnlyFile(localFullPath) });
+                    }
+                    else
+                    {
+                        await Shell.Current.DisplayAlert("Hata", "İndirme başarısız.", "Tamam");
+                    }
+                }
+                finally { IsBusy = false; }
+            }
+            catch (Exception ex)
+            {
+                await Shell.Current.DisplayAlert("Hata", ex.Message, "Tamam");
+            }
+        }
     }
 }

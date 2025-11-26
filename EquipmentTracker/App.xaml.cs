@@ -18,10 +18,7 @@ namespace EquipmentTracker
         {
             InitializeComponent();
             _serviceProvider = serviceProvider;
-
             MainPage = new NavigationPage(serviceProvider.GetRequiredService<LoginPage>());
-
-            // İnternet durumunu dinle
             Connectivity.Current.ConnectivityChanged += Current_ConnectivityChanged;
         }
 
@@ -82,63 +79,29 @@ namespace EquipmentTracker
         }
 
         // --- YENİ: OTURUM KONTROL MEKANİZMASI ---
-        private void StartSessionCheck()
+        public void StartSessionCheck()
         {
-            _cancellationTokenSource?.Cancel();
+            // Varsa eskisini durdur
+            StopSessionCheck();
+
             _cancellationTokenSource = new CancellationTokenSource();
             var token = _cancellationTokenSource.Token;
 
-            Task.Run(async () =>
+            // 1. Oturum Kontrol Döngüsü
+            Task.Run(() => SessionCheckLoop(token));
+
+            // 2. Dosya Senkronizasyonu (Sadece Admin ise)
+            if (CurrentUser != null && CurrentUser.IsAdmin)
             {
-                while (!token.IsCancellationRequested)
-                {
-                    try
-                    {
-                        await Task.Delay(5000, token);
-
-                        // İnternet yoksa döngüyü pas geç (Çökmemesi için)
-                        if (Connectivity.Current.NetworkAccess != NetworkAccess.Internet)
-                        {
-                            continue;
-                        }
-
-                        if (CurrentUser != null)
-                        {
-                            using (var scope = _serviceProvider.CreateScope())
-                            {
-                                var authService = scope.ServiceProvider.GetRequiredService<IAuthService>();
-
-                                // BURADA HATA OLABİLİR (SQL Timeout vs.) TRY-CATCH İÇİNDE KALMALI
-                                bool isActive = await authService.IsUserActiveAsync(CurrentUser.Id);
-
-                                if (!isActive)
-                                {
-                                    await MainThread.InvokeOnMainThreadAsync(async () =>
-                                    {
-                                        if (CurrentUser != null)
-                                        {
-                                            CurrentUser = null;
-                                            await MainPage.DisplayAlert("Oturum Sonlandı", "Oturumunuz sonlandırıldı.", "Tamam");
-                                            var loginPage = _serviceProvider.GetRequiredService<LoginPage>();
-                                            MainPage = new NavigationPage(loginPage);
-                                        }
-                                    });
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                    catch (OperationCanceledException) { break; }
-                    catch (Exception ex)
-                    {
-                        // Hata olsa bile çökme, sadece logla ve devam et (veya bekle)
-                        System.Diagnostics.Debug.WriteLine($"Session Check Error (Ignored): {ex.Message}");
-                        // Hata sonrası biraz daha uzun bekle ki sürekli hata fırlatmasın
-                        await Task.Delay(5000);
-                    }
-                }
-            });
+                Task.Run(() => FileSyncLoop(token));
+            }
         }
+        public void StopSessionCheck()
+        {
+            _cancellationTokenSource?.Cancel();
+            _cancellationTokenSource = null;
+        }
+
 
         private void StartBackgroundTasks()
         {
@@ -159,40 +122,32 @@ namespace EquipmentTracker
             {
                 try
                 {
-                    await Task.Delay(5000, token); // 5 saniyede bir kontrol
+                    await Task.Delay(5000, token);
 
-                    // İnternet yoksa kontrol yapma (Çökmemesi için)
                     if (Connectivity.Current.NetworkAccess != NetworkAccess.Internet) continue;
+                    if (CurrentUser == null) continue;
 
-                    if (CurrentUser != null)
+                    using (var scope = _serviceProvider.CreateScope())
                     {
-                        using (var scope = _serviceProvider.CreateScope())
-                        {
-                            var authService = scope.ServiceProvider.GetRequiredService<IAuthService>();
-                            bool isActive = await authService.IsUserActiveAsync(CurrentUser.Id);
+                        var authService = scope.ServiceProvider.GetRequiredService<IAuthService>();
+                        bool isActive = await authService.IsUserActiveAsync(CurrentUser.Id);
 
-                            if (!isActive)
+                        if (!isActive)
+                        {
+                            await MainThread.InvokeOnMainThreadAsync(async () =>
                             {
-                                await MainThread.InvokeOnMainThreadAsync(async () =>
-                                {
-                                    if (CurrentUser != null)
-                                    {
-                                        CurrentUser = null;
-                                        await MainPage.DisplayAlert("Oturum Sonlandı", "Oturumunuz sonlandırıldı.", "Tamam");
-                                        await PerformLocalLogoutAsync();
-                                    }
-                                });
-                                break; // Döngüden çık
-                            }
+                                // Çıkış yapılmışsa at
+                                StopSessionCheck();
+                                CurrentUser = null;
+                                await MainPage.DisplayAlert("Oturum Sonlandı", "Oturumunuz sonlandırıldı.", "Tamam");
+                                MainPage = new NavigationPage(_serviceProvider.GetRequiredService<LoginPage>());
+                            });
+                            break;
                         }
                     }
                 }
                 catch (OperationCanceledException) { break; }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"Session Check Error: {ex.Message}");
-                    await Task.Delay(5000); // Hata alırsa biraz bekle
-                }
+                catch { await Task.Delay(5000); } // Hata olursa bekle
             }
         }
 
@@ -202,28 +157,18 @@ namespace EquipmentTracker
             {
                 try
                 {
-                    // 1 Dakikada bir kontrol et (Süreyi ihtiyaca göre değiştirebilirsin)
                     await Task.Delay(TimeSpan.FromMinutes(1), token);
-
-                    // İnternet yoksa veya kullanıcı yoksa veya ADMIN değilse yapma
                     if (Connectivity.Current.NetworkAccess != NetworkAccess.Internet) continue;
-                    if (CurrentUser == null || !CurrentUser.IsAdmin) continue;
+                    if (CurrentUser == null || !CurrentUser.IsAdmin) break; // Admin değilse döngüyü kır
 
-                    // Senkronizasyonu Başlat
                     using (var scope = _serviceProvider.CreateScope())
                     {
                         var jobService = scope.ServiceProvider.GetRequiredService<IJobService>();
-
-                        // Bu metot eksik dosyaları indirir (zaten varsa indirmez, hızlı çalışır)
                         await jobService.SyncAllFilesFromFtpAsync();
                     }
                 }
                 catch (OperationCanceledException) { break; }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"Auto-Sync Error: {ex.Message}");
-                    await Task.Delay(10000); // Hata alırsa 10sn bekle
-                }
+                catch { }
             }
         }
 
@@ -231,35 +176,15 @@ namespace EquipmentTracker
         {
             if (e.NetworkAccess != NetworkAccess.Internet)
             {
-                // İnternet GİTTİ -> Kullanıcıyı Login'e at
-                MainThread.BeginInvokeOnMainThread(async () =>
+                MainThread.BeginInvokeOnMainThread(() =>
                 {
                     if (CurrentUser != null)
                     {
-                        // İsteğe bağlı uyarı:
-                        // await MainPage.DisplayAlert("Bağlantı", "İnternet bağlantısı kesildi. Güvenli çıkış yapılıyor.", "Tamam");
-                        await PerformLocalLogoutAsync();
+                        StopSessionCheck(); // Döngüyü durdur
+                        CurrentUser = null;
+                        MainPage = new NavigationPage(_serviceProvider.GetRequiredService<LoginPage>());
                     }
                 });
-            }
-            else
-            {
-                // İnternet GELDİ -> Adminse hemen bir sync başlat
-                if (CurrentUser != null && CurrentUser.IsAdmin)
-                {
-                    Task.Run(async () =>
-                    {
-                        try
-                        {
-                            using (var scope = _serviceProvider.CreateScope())
-                            {
-                                var jobService = scope.ServiceProvider.GetRequiredService<IJobService>();
-                                await jobService.SyncAllFilesFromFtpAsync();
-                            }
-                        }
-                        catch { }
-                    });
-                }
             }
         }
 
