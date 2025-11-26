@@ -206,6 +206,8 @@
 
                                                         </Grid>
 
+                                                        
+                                                        
                                                         <Label Grid.Column="1" Text="{Binding FileName}" TextColor="Blue" TextDecorations="Underline" VerticalOptions="Center" FontSize="Caption">
                                                             <Label.GestureRecognizers>
                                                                 <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=CopyToClipboardCommand}" CommandParameter="{Binding FilePath}"/>

@@ -10,7 +10,7 @@ namespace EquipmentTracker.Models
         public string FilePath { get; set; }
 
         [ObservableProperty] 
-        private string _thumbnailPath;
+        private string? _thumbnailPath;
 
         public int EquipmentId { get; set; }
         public Equipment Equipment { get; set; }

@@ -240,7 +240,7 @@ namespace EquipmentTracker.Services.EquipmentPartAttachmentServices
             string partFolder = $"{parentJob.JobNumber}_{parentEquipment.EquipmentId}_{parentPart.PartId}_{safePartName}";
 
             string localTargetDir;
-            if (App.CurrentUser?.IsAdmin ?? false) // Admin Kontrolü
+            if (App.CurrentUser?.IsAdmin ?? false) 
             {
                 string dbPath = GetBaseDatabasePath();
                 localTargetDir = Path.Combine(dbPath, "Attachments", jobFolder, equipFolder, partFolder);
@@ -258,13 +258,12 @@ namespace EquipmentTracker.Services.EquipmentPartAttachmentServices
             using (var stream = await fileToCopy.OpenReadAsync())
             using (var dest = File.Create(uniqueFilePath)) { await stream.CopyToAsync(dest); }
 
-            // RELATIVE PATH
             string ftpRelativePath = $"Attachments/{jobFolder}/{equipFolder}/{partFolder}/{uniqueFileName}";
 
             var newAttachment = new EquipmentPartAttachment
             {
                 FileName = uniqueFileName,
-                FilePath = ftpRelativePath, // DB'ye Hostinger yolu
+                FilePath = ftpRelativePath, 
                 ThumbnailPath = null,
                 EquipmentPartId = parentPart.Id,
                 IsProcessing = true
@@ -323,7 +322,16 @@ namespace EquipmentTracker.Services.EquipmentPartAttachmentServices
                 var dbContext = scope.ServiceProvider.GetRequiredService<DataContext>();
                 try
                 {
-                    // 1. FTP Yükleme
+                    // İsimleri Hazırla
+                    string safeJobName = SanitizeFolderName(job.JobName);
+                    string safeEquipName = SanitizeFolderName(equip.Name);
+                    string safePartName = SanitizeFolderName(part.Name);
+
+                    string jobFolder = $"{job.JobNumber}_{safeJobName}";
+                    string equipFolder = $"{job.JobNumber}_{equip.EquipmentId}_{safeEquipName}";
+                    string partFolder = $"{job.JobNumber}_{equip.EquipmentId}_{part.PartId}_{safePartName}";
+
+                    // 1. FTP ANA DOSYA
                     string ftpFolderPath = Path.GetDirectoryName(ftpRelativePath).Replace("\\", "/");
 
                     var uploadProgress = new Progress<double>(percent =>
@@ -331,36 +339,31 @@ namespace EquipmentTracker.Services.EquipmentPartAttachmentServices
                         MainThread.BeginInvokeOnMainThread(() => attachment.ProcessingProgress = percent * 0.6);
                     });
 
-                    var folders = ftpFolderPath.Split('/');
-                    string currentPath = "";
-                    foreach (var folder in folders)
-                    {
-                        if (string.IsNullOrEmpty(folder)) continue;
-                        currentPath = string.IsNullOrEmpty(currentPath) ? folder : $"{currentPath}/{folder}";
-                        await _ftpHelper.CreateDirectoryAsync(currentPath);
-                    }
+                    // Klasörleri Sırayla Oluştur
+                    await _ftpHelper.CreateDirectoryAsync("Attachments");
+                    await _ftpHelper.CreateDirectoryAsync($"Attachments/{jobFolder}");
+                    await _ftpHelper.CreateDirectoryAsync($"Attachments/{jobFolder}/{equipFolder}");
+                    await _ftpHelper.CreateDirectoryAsync($"Attachments/{jobFolder}/{equipFolder}/{partFolder}");
 
                     await _ftpHelper.UploadFileWithProgressAsync(sourceLocalPath, ftpFolderPath, uploadProgress);
 
-                    // 2. Thumbnail
+                    // 2. THUMBNAIL
                     string extension = Path.GetExtension(sourceLocalPath).ToLower();
                     if (extension == ".dwg" || extension == ".dxf")
                     {
                         MainThread.BeginInvokeOnMainThread(() => attachment.ProcessingProgress = 0.65);
 
-                        string safeJobName = SanitizeFolderName(job.JobName);
-                        string safeEquipName = SanitizeFolderName(equip.Name);
-                        string safePartName = SanitizeFolderName(part.Name);
-
                         string realThumbName = $"{Path.GetFileNameWithoutExtension(sourceLocalPath)}_thumb.png";
 
-                        string ftpImagesPath = $"Attachments/Images/{job.JobNumber}_{safeJobName}/{job.JobNumber}_{equip.EquipmentId}_{safeEquipName}/{job.JobNumber}_{equip.EquipmentId}_{part.PartId}_{safePartName}";
+                        // FTP Resim Yolu: Attachments/Images/Job/Equip/Part
+                        string ftpImagesBase = "Attachments/Images";
+                        string ftpImagesPath = $"{ftpImagesBase}/{jobFolder}/{equipFolder}/{partFolder}";
                         string ftpThumbFullPath = $"{ftpImagesPath}/{realThumbName}";
 
-                        // --- DÜZELTME: Benzersiz Geçici Klasör ---
+                        // Geçici Dosya
                         string tempDir = Path.Combine(FileSystem.CacheDirectory, Guid.NewGuid().ToString());
-                        Directory.CreateDirectory(tempDir);
-                        string tempThumbPath = Path.Combine(tempDir, realThumbName); // Doğru isim, izole klasör
+                        if (!Directory.Exists(tempDir)) Directory.CreateDirectory(tempDir);
+                        string safeTempPath = Path.Combine(tempDir, realThumbName);
 
                         await Task.Run(() =>
                         {
@@ -374,7 +377,7 @@ namespace EquipmentTracker.Services.EquipmentPartAttachmentServices
                                     BackgroundColor = Aspose.CAD.Color.White,
                                     DrawType = Aspose.CAD.FileFormats.Cad.CadDrawTypeMode.UseObjectColor
                                 };
-                                cadImage.Save(tempThumbPath, new PngOptions { VectorRasterizationOptions = rasterizationOptions });
+                                cadImage.Save(safeTempPath, new PngOptions { VectorRasterizationOptions = rasterizationOptions });
                             }
                         });
 
@@ -386,18 +389,20 @@ namespace EquipmentTracker.Services.EquipmentPartAttachmentServices
                             await dbContext.SaveChangesAsync();
                         }
 
-                        MainThread.BeginInvokeOnMainThread(() => attachment.ThumbnailPath = tempThumbPath);
+                        // UI Güncelle
+                        MainThread.BeginInvokeOnMainThread(() => attachment.ThumbnailPath = safeTempPath);
 
                         // FTP Yükle
                         MainThread.BeginInvokeOnMainThread(() => attachment.ProcessingProgress = 0.8);
 
-                        await _ftpHelper.CreateDirectoryAsync("Attachments/Images");
-                        string[] imgFolders = ftpImagesPath.Replace("Attachments/Images/", "").Split('/');
-                        string currentImgPath = "Attachments/Images";
-                        foreach (var f in imgFolders) { currentImgPath += $"/{f}"; await _ftpHelper.CreateDirectoryAsync(currentImgPath); }
+                        // Resim Klasörlerini Sırayla Oluştur
+                        await _ftpHelper.CreateDirectoryAsync("Attachments");
+                        await _ftpHelper.CreateDirectoryAsync(ftpImagesBase);
+                        await _ftpHelper.CreateDirectoryAsync($"{ftpImagesBase}/{jobFolder}");
+                        await _ftpHelper.CreateDirectoryAsync($"{ftpImagesBase}/{jobFolder}/{equipFolder}");
+                        await _ftpHelper.CreateDirectoryAsync(ftpImagesPath);
 
-                        // tempThumbPath içindeki dosya ismi "realThumbName" olduğu için FTP'ye doğru isimle gider
-                        await _ftpHelper.UploadFileAsync(tempThumbPath, ftpImagesPath);
+                        await _ftpHelper.UploadFileAsync(safeTempPath, ftpImagesPath);
                     }
 
                     // Temizlik
@@ -408,11 +413,11 @@ namespace EquipmentTracker.Services.EquipmentPartAttachmentServices
                     }
 
                     MainThread.BeginInvokeOnMainThread(() => attachment.ProcessingProgress = 1.0);
-                    await Task.Delay(500);
+                    await Task.Delay(300);
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine($"Part Arka Plan Hatası: {ex.Message}");
+                    System.Diagnostics.Debug.WriteLine($"Part Arka Plan Hatası: {ex.Message}");
                 }
                 finally
                 {
