@@ -1,4 +1,5 @@
 ﻿using EquipmentTracker.Models;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 
 namespace EquipmentTracker.Data
@@ -75,6 +76,16 @@ namespace EquipmentTracker.Data
 
                 //string connectionString = $"Server={serverIp};Database={dbName};User={dbUser};Password={dbPass};Port=3306;";
                 string connectionString = "Server=localhost;Database=TrackerDB;User=root;Password=;";
+
+                var builder = new SqlConnectionStringBuilder
+                {
+                    DataSource = serverIp,
+                    InitialCatalog = "TrackerDB",
+                    UserID = dbUser,
+                    Password = dbPass,
+                    TrustServerCertificate = true,
+                    ConnectTimeout = 30 // <-- BURAYI 5'TEN 30'A ÇIKARIN
+                };
 
                 optionsBuilder.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString));
             }

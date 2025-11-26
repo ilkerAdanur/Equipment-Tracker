@@ -17,5 +17,6 @@ public interface IJobService
     Task ToggleJobStatusAsync(int jobId, bool isCancelled);
     Task<string> GetGlobalAttachmentPathAsync();
     Task SetGlobalAttachmentPathAsync(string path);
+    Task SyncAllFilesFromFtpAsync();
 
 }

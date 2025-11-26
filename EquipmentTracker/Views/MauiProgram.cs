@@ -49,19 +49,13 @@ public static class MauiProgram
             string dbUser = Preferences.Get("DbUser", "");
             string dbPass = Preferences.Get("DbPassword", "");
 
-            // Eğer ayarlar boşsa, uygulama patlamasın diye boş bir connection string veya dummy kuruyoruz
             if (string.IsNullOrWhiteSpace(serverIp) || string.IsNullOrWhiteSpace(dbName))
             {
-                // Geçici olarak InMemory veya boş bırakabilirsiniz, ancak migration hatası vermemesi için
-                // kullanıcıyı Login ekranında Settings'e yönlendirmek en doğrusu.
                 return;
             }
 
-            // MySQL Bağlantı Dizesi
-            // Hostinger için genellikle port 3306'dır.
-            string connectionString = $"Server={serverIp};Database={dbName};User={dbUser};Password={dbPass};Port=3306;";
+            string connectionString = $"Server={serverIp};Database={dbName};User={dbUser};Password={dbPass};Port=3306;ConnectionTimeout=30;";
 
-            // Pomelo MySQL Kullanımı
             options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString));
         });
 

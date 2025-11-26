@@ -26,8 +26,8 @@ namespace EquipmentTracker.ViewModels
         [RelayCommand]
         async Task Login()
         {
-            if (IsBusy) return; // Zaten işlem yapılıyorsa tekrar basmayı engelle
-            IsBusy = true;      // Çark dönmeye başlasın
+            if (IsBusy) return;
+            IsBusy = true;
 
             try
             {
@@ -54,6 +54,31 @@ namespace EquipmentTracker.ViewModels
                 {
                     // BAŞARILI
                     App.CurrentUser = user;
+
+                    // --- YENİ: EĞER ADMİN İSE SENKRONİZASYONU BAŞLAT ---
+                    if (user.IsAdmin)
+                    {
+                        // Arka planda çalıştır, girişi bekletme
+                        _ = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                // JobService'i manuel scope ile alıyoruz
+                                // Çünkü LoginViewModel transient olabilir ama işlem uzun sürebilir
+                                var jobService = Application.Current.Handler.MauiContext.Services.GetService<IJobService>();
+
+                                // Global yolu kontrol et ve verileri indir
+                                await jobService.SyncAllFilesFromFtpAsync();
+                            }
+                            catch (Exception ex)
+                            {
+                                System.Diagnostics.Debug.WriteLine($"Auto-Sync Error: {ex.Message}");
+                            }
+                        });
+                    }
+
+                    // ----------------------------------------------------
+
                     Application.Current.MainPage = new AppShell();
                 }
                 else

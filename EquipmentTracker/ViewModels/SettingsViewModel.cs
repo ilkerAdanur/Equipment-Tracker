@@ -6,6 +6,7 @@ using EquipmentTracker.Services.Auth;
 using EquipmentTracker.Services.Job;
 using EquipmentTracker.ViewModels;
 using EquipmentTracker.Views;
+using Microsoft.Data.SqlClient;
 using MySqlConnector;
 using System;
 using System.IO;
@@ -21,6 +22,7 @@ namespace EquipmentTracker.ViewModels
         private readonly IServiceProvider _serviceProvider;
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(IsAdminUser))] 
         bool _isAdmin;
 
         [ObservableProperty]
@@ -30,7 +32,7 @@ namespace EquipmentTracker.ViewModels
         string _serverIp;
 
         [ObservableProperty]
-        string _dbName; // Veritabanı Adı
+        string _dbName; 
 
         [ObservableProperty]
         string _dbUser;
@@ -39,7 +41,7 @@ namespace EquipmentTracker.ViewModels
         string _dbPassword;
 
         [ObservableProperty]
-        string _ftpHost;
+        string _ftpHost = "ftp://46.202.156.198";
 
         [ObservableProperty]
         string _ftpUser; 
@@ -75,7 +77,7 @@ namespace EquipmentTracker.ViewModels
             _folderPicker = folderPicker;
             _serviceProvider = serviceProvider;
             Title = "Ayarlar";
-            IsAdmin = App.CurrentUser?.IsAdmin ?? false;
+            IsAdmin = App.CurrentUser?.IsAdmin ?? false; 
             LoadSettings();
         }
 
@@ -137,9 +139,10 @@ namespace EquipmentTracker.ViewModels
         [RelayCommand]
         async Task ConnectDatabase()
         {
+            // Boş alan kontrolü
             if (string.IsNullOrWhiteSpace(ServerIp) || string.IsNullOrWhiteSpace(DbName) || string.IsNullOrWhiteSpace(DbUser))
             {
-                await ShowAlertAsync("Hata", "Lütfen veritabanı alanlarını doldurun.");
+                await ShowAlertAsync("Hata", "Lütfen veritabanı bilgilerini eksiksiz doldurun.");
                 return;
             }
 
@@ -148,48 +151,59 @@ namespace EquipmentTracker.ViewModels
 
             try
             {
+                // 1. MySQL Bağlantı Cümlesini Oluştur (Hostinger Uyumlu)
+                // DİKKAT: SqlConnectionStringBuilder DEĞİL, MySqlConnectionStringBuilder kullanıyoruz.
                 var builder = new MySqlConnectionStringBuilder
                 {
                     Server = ServerIp,
                     Database = DbName,
                     UserID = DbUser,
                     Password = DbPassword,
-                    Port = 3306,
-                    ConnectionTimeout = 10
+                    Port = 3306, // MySQL varsayılan portu
+                    ConnectionTimeout = 30 // Zaman aşımı 30 saniye
                 };
 
-                using (var conn = new MySqlConnection(builder.ConnectionString))
+                // 2. Bağlantıyı Test Et
+                // DİKKAT: SqlConnection DEĞİL, MySqlConnection kullanıyoruz.
+                using (var connection = new MySqlConnection(builder.ConnectionString))
                 {
-                    await conn.OpenAsync();
+                    await connection.OpenAsync();
                 }
 
-                // Başarılıysa Kaydet
+                // 3. Başarılıysa Ayarları Kaydet
                 Preferences.Set("ServerIP", ServerIp);
                 Preferences.Set("DbName", DbName);
                 Preferences.Set("DbUser", DbUser);
                 Preferences.Set("DbPassword", DbPassword);
 
                 SetConnectedState(true);
-                await ShowAlertAsync("Başarılı", "Veritabanı bağlantısı sağlandı ve kaydedildi.");
+                await ShowAlertAsync("Başarılı", "Hostinger (MySQL) bağlantısı başarıyla sağlandı.");
+            }
+            catch (MySqlException ex)
+            {
+                SetConnectedState(false);
+                // MySQL'e özgü hataları yakalar
+                await ShowAlertAsync("MySQL Hatası", $"Bağlanılamadı.\nHata Kodu: {ex.Number}\nMesaj: {ex.Message}");
             }
             catch (Exception ex)
             {
                 SetConnectedState(false);
-                await ShowAlertAsync("Veritabanı Hatası", ex.Message);
+                await ShowAlertAsync("Genel Hata", $"Bağlantı hatası: {ex.Message}");
             }
             finally
             {
                 IsBusy = false;
             }
         }
+
+
         [RelayCommand]
         async Task DisconnectDatabase()
         {
-            bool answer = await Shell.Current.DisplayAlert("Bağlantıyı Kes", "Veritabanı ayarlarını silmek istiyor musunuz?", "Evet", "İptal");
+            bool answer = await ShowConfirmAsync("Bağlantıyı Kes", "Veritabanı ayarlarını silmek istiyor musunuz?");
             if (!answer) return;
 
             Preferences.Remove("ServerIP");
-            Preferences.Remove("DbName");
             Preferences.Remove("DbUser");
             Preferences.Remove("DbPassword");
 
@@ -197,11 +211,11 @@ namespace EquipmentTracker.ViewModels
         }
 
         [RelayCommand]
-        async Task ConnectFtp()
+        async Task SaveServerIp()
         {
-            if (string.IsNullOrWhiteSpace(FtpHost) || string.IsNullOrWhiteSpace(FtpUser) || string.IsNullOrWhiteSpace(FtpPassword))
+            if (string.IsNullOrWhiteSpace(ServerIp) || string.IsNullOrWhiteSpace(DbName) || string.IsNullOrWhiteSpace(DbUser))
             {
-                await ShowAlertAsync("Hata", "Lütfen FTP alanlarını doldurun.");
+                await ShowAlertAsync("Hata", "Lütfen veritabanı alanlarını eksiksiz doldurun.");
                 return;
             }
 
@@ -210,32 +224,70 @@ namespace EquipmentTracker.ViewModels
 
             try
             {
-                // "ftp://" ön eki kontrolü
-                string ftpUrl = FtpHost.StartsWith("ftp://") ? FtpHost : "ftp://" + FtpHost;
-
-                // Bağlantı Testi (ListDirectory)
-                FtpWebRequest request = (FtpWebRequest)WebRequest.Create(ftpUrl);
-                request.Method = WebRequestMethods.Ftp.ListDirectory;
-                request.Credentials = new NetworkCredential(FtpUser, FtpPassword);
-                request.Timeout = 5000; // 5 sn zaman aşımı
-
-                using (FtpWebResponse response = (FtpWebResponse)await request.GetResponseAsync())
+                // 1. MySQL Bağlantı Testi (Hostinger)
+                var builder = new MySqlConnectionStringBuilder
                 {
-                    // Hata vermediyse başarılıdır
+                    Server = ServerIp,
+                    Database = DbName,
+                    UserID = DbUser,
+                    Password = DbPassword,
+                    Port = 3306,
+                    ConnectionTimeout = 30
+                };
+
+                using (var conn = new MySqlConnection(builder.ConnectionString))
+                {
+                    await conn.OpenAsync();
                 }
 
-                // Başarılıysa Kaydet
+                // 2. FTP Bağlantı Testi
+                if (!string.IsNullOrWhiteSpace(FtpHost) && !string.IsNullOrWhiteSpace(FtpUser) && !string.IsNullOrWhiteSpace(FtpPassword))
+                {
+                    try
+                    {
+                        // ftp:// ön eki yoksa ekle
+                        string ftpUrl = FtpHost.StartsWith("ftp://") ? FtpHost : "ftp://" + FtpHost;
+
+                        FtpWebRequest request = (FtpWebRequest)WebRequest.Create(ftpUrl);
+                        request.Method = WebRequestMethods.Ftp.ListDirectory;
+                        request.Credentials = new NetworkCredential(FtpUser, FtpPassword);
+                        request.Timeout = 10000; // 10 saniye zaman aşımı
+
+                        using (FtpWebResponse response = (FtpWebResponse)await request.GetResponseAsync())
+                        {
+                            // Hata vermediyse bağlantı başarılıdır
+                        }
+                    }
+                    catch (Exception ftpEx)
+                    {
+                        // Veritabanı bağlandı ama FTP hatası var, kullanıcıyı uyar
+                        throw new Exception($"MySQL bağlandı ancak FTP hatası alındı: {ftpEx.Message}");
+                    }
+                }
+
+                // 3. Her şey yolundaysa tüm ayarları kaydet
+                Preferences.Set("ServerIP", ServerIp);
+                Preferences.Set("DbName", DbName);
+                Preferences.Set("DbUser", DbUser);
+                Preferences.Set("DbPassword", DbPassword);
+
+                // FTP Ayarlarını Kaydet
                 Preferences.Set("FtpHost", FtpHost);
                 Preferences.Set("FtpUser", FtpUser);
                 Preferences.Set("FtpPassword", FtpPassword);
 
-                SetFtpConnectedState(true);
-                await ShowAlertAsync("Başarılı", "FTP bağlantısı sağlandı ve kaydedildi.");
+                SetConnectedState(true);
+                await ShowAlertAsync("Başarılı", "Veritabanı ve FTP bağlantısı başarıyla sağlandı ve kaydedildi.");
+            }
+            catch (MySqlException ex)
+            {
+                SetConnectedState(false);
+                await ShowAlertAsync("MySQL Hatası", $"Veritabanına bağlanılamadı.\nHata: {ex.Message}");
             }
             catch (Exception ex)
             {
-                SetFtpConnectedState(false);
-                await ShowAlertAsync("FTP Hatası", ex.Message);
+                SetConnectedState(false);
+                await ShowAlertAsync("Hata", ex.Message);
             }
             finally
             {
@@ -244,9 +296,49 @@ namespace EquipmentTracker.ViewModels
         }
 
         [RelayCommand]
+        async Task ConnectFtp()
+        {
+            if (string.IsNullOrWhiteSpace(FtpHost) || string.IsNullOrWhiteSpace(FtpUser))
+            {
+                await ShowAlertAsync("Hata", "FTP bilgileri eksik.");
+                return;
+            }
+
+            if (IsBusy) return;
+            IsBusy = true;
+
+            try
+            {
+                // FTP Testi
+                string ftpUrl = FtpHost.StartsWith("ftp://") ? FtpHost : "ftp://" + FtpHost;
+                FtpWebRequest request = (FtpWebRequest)WebRequest.Create(ftpUrl);
+                request.Method = WebRequestMethods.Ftp.ListDirectory;
+                request.Credentials = new NetworkCredential(FtpUser, FtpPassword);
+                request.Timeout = 5000;
+
+                using (FtpWebResponse response = (FtpWebResponse)await request.GetResponseAsync()) { }
+
+                // Başarılıysa kaydet
+                Preferences.Set("FtpHost", FtpHost);
+                Preferences.Set("FtpUser", FtpUser);
+                Preferences.Set("FtpPassword", FtpPassword);
+
+                SetFtpConnectedState(true);
+                await ShowAlertAsync("Başarılı", "FTP bağlantısı sağlandı.");
+            }
+            catch (Exception ex)
+            {
+                SetFtpConnectedState(false);
+                await ShowAlertAsync("Hata", $"FTP hatası: {ex.Message}");
+            }
+            finally { IsBusy = false; }
+        }
+
+
+        [RelayCommand]
         async Task DisconnectFtp()
         {
-            bool answer = await Shell.Current.DisplayAlert("Bağlantıyı Kes", "FTP ayarlarını silmek istiyor musunuz?", "Evet", "İptal");
+            bool answer = await ShowConfirmAsync("Bağlantıyı Kes", "FTP ayarlarını silmek istiyor musunuz?");
             if (!answer) return;
 
             Preferences.Remove("FtpHost");
@@ -266,23 +358,27 @@ namespace EquipmentTracker.ViewModels
         {
             try
             {
-                // ServiceProvider üzerinden servise erişiyoruz (Constructor'da eklemeniz gerekebilir veya Handler üzerinden)
-                // Basitlik için Handler kullanıyoruz:
-                var jobService = Application.Current.Handler.MauiContext.Services.GetService<IJobService>();
-                var globalPath = await jobService.GetGlobalAttachmentPathAsync();
+                // DÜZELTME: Application.Current... yerine güvenli olan _serviceProvider kullanıyoruz.
+                // Bu sayede NullReference hatasından kurtulursunuz.
+                using (var scope = _serviceProvider.CreateScope())
+                {
+                    var jobService = scope.ServiceProvider.GetRequiredService<IJobService>();
+                    var globalPath = await jobService.GetGlobalAttachmentPathAsync();
 
-                if (!string.IsNullOrEmpty(globalPath))
-                {
-                    AttachmentPath = globalPath;
-                }
-                else
-                {
-                    AttachmentPath = "Henüz ayarlanmamış (Admin bekleniyor)";
+                    if (!string.IsNullOrEmpty(globalPath))
+                    {
+                        AttachmentPath = globalPath;
+                    }
+                    else
+                    {
+                        AttachmentPath = "Henüz ayarlanmamış (Admin bekleniyor)";
+                    }
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                AttachmentPath = "Veritabanına erişilemedi.";
+                System.Diagnostics.Debug.WriteLine($"Path Yükleme Hatası: {ex.Message}");
+                AttachmentPath = "Veritabanına erişilemedi veya yol bulunamadı.";
             }
         }
         private void SetConnectedState(bool connected)
@@ -306,31 +402,28 @@ namespace EquipmentTracker.ViewModels
         [RelayCommand]
         async Task Logout()
         {
-            bool answer = await Shell.Current.DisplayAlert("Çıkış", "Oturumu kapatmak istiyor musunuz?", "Evet", "Hayır");
+            bool answer = await ShowConfirmAsync("Çıkış", "Oturumu kapatmak istiyor musunuz?");
             if (!answer) return;
 
             if (App.CurrentUser != null)
             {
                 try
                 {
-                    using (var scope = _serviceProvider.CreateScope())
-                    {
-                        var authService = scope.ServiceProvider.GetService<IAuthService>();
-                        if (authService != null) await authService.LogoutAsync(App.CurrentUser.Id);
-                    }
+                    var authService = Application.Current.Handler.MauiContext.Services.GetService<IAuthService>();
+                    await authService.LogoutAsync(App.CurrentUser.Id);
                 }
                 catch { }
             }
 
             App.CurrentUser = null;
-            var loginPage = _serviceProvider.GetService<LoginPage>();
+            var loginPage = Application.Current.Handler.MauiContext.Services.GetService<LoginPage>();
             Application.Current.MainPage = new NavigationPage(loginPage);
         }
 
-
         private async Task ShowAlertAsync(string title, string message)
         {
-            if (Application.Current?.MainPage != null)
+            // Application.Current null ise işlem yapma (Çökmeyi önler)
+            if (Application.Current != null && Application.Current.MainPage != null)
             {
                 await MainThread.InvokeOnMainThreadAsync(async () =>
                 {
@@ -339,83 +432,59 @@ namespace EquipmentTracker.ViewModels
             }
         }
 
-        [RelayCommand]
-        async Task SaveServerIp()
+        private async Task<bool> ShowConfirmAsync(string title, string message)
         {
-            if (string.IsNullOrWhiteSpace(ServerIp) || string.IsNullOrWhiteSpace(DbName) || string.IsNullOrWhiteSpace(DbUser))
+            if (Application.Current?.MainPage != null)
             {
-                await ShowAlertAsync("Hata", "Lütfen veritabanı alanlarını doldurun.");
+                return await MainThread.InvokeOnMainThreadAsync(async () =>
+                {
+                    return await Application.Current.MainPage.DisplayAlert(title, message, "Evet", "İptal");
+                });
+            }
+            return false;
+        }
+
+        [RelayCommand]
+        async Task SaveAttachmentPath()
+        {
+            if (!IsAdminUser)
+            {
+                await ShowAlertAsync("Unauthorized", "Only admins can change this setting.");
                 return;
             }
+
+            if (string.IsNullOrWhiteSpace(AttachmentPath)) return;
 
             if (IsBusy) return;
             IsBusy = true;
 
             try
             {
-                // 1. MySQL Bağlantı Testi
-                var builder = new MySqlConnectionStringBuilder
-                {
-                    Server = ServerIp,
-                    Database = DbName,
-                    UserID = DbUser,
-                    Password = DbPassword,
-                    Port = 3306,
-                    ConnectionTimeout = 10
-                };
+                string testPath = Path.Combine(AttachmentPath, "Attachments");
+                if (!Directory.Exists(testPath)) Directory.CreateDirectory(testPath);
 
-                using (var conn = new MySqlConnection(builder.ConnectionString))
+                Preferences.Set("attachment_path", AttachmentPath);
+
+                // Update Global Setting in DB
+                // Use _serviceProvider to avoid NullReferenceException
+                using (var scope = _serviceProvider.CreateScope())
                 {
-                    await conn.OpenAsync();
+                    var jobService = scope.ServiceProvider.GetRequiredService<IJobService>();
+                    await jobService.SetGlobalAttachmentPathAsync(AttachmentPath);
+
+                    // Start Sync
+                    _ = Task.Run(async () =>
+                    {
+                        try { await jobService.SyncAllFilesFromFtpAsync(); }
+                        catch { }
+                    });
                 }
 
-                // 2. FTP Bağlantı Testi (Basit bir listeleme denemesi)
-                if (!string.IsNullOrWhiteSpace(FtpHost) && !string.IsNullOrWhiteSpace(FtpUser) && !string.IsNullOrWhiteSpace(FtpPassword))
-                {
-                    try
-                    {
-                        // "ftp://" ile başlamıyorsa ekleyelim
-                        string ftpUrl = FtpHost.StartsWith("ftp://") ? FtpHost : "ftp://" + FtpHost;
-
-                        FtpWebRequest request = (FtpWebRequest)WebRequest.Create(ftpUrl);
-                        request.Method = WebRequestMethods.Ftp.ListDirectory;
-                        request.Credentials = new NetworkCredential(FtpUser, FtpPassword);
-                        request.Timeout = 5000; // 5 saniye zaman aşımı
-
-                        using (FtpWebResponse response = (FtpWebResponse)await request.GetResponseAsync())
-                        {
-                            // Hata vermediyse bağlantı başarılıdır
-                        }
-                    }
-                    catch (Exception ftpEx)
-                    {
-                        throw new Exception($"MySQL bağlandı ama FTP hatası: {ftpEx.Message}");
-                    }
-                }
-
-                // 3. Her şey yolundaysa kaydet
-                Preferences.Set("ServerIP", ServerIp);
-                Preferences.Set("DbName", DbName);
-                Preferences.Set("DbUser", DbUser);
-                Preferences.Set("DbPassword", DbPassword);
-
-                // FTP Kaydet
-                Preferences.Set("FtpHost", FtpHost);
-                Preferences.Set("FtpUser", FtpUser);
-                Preferences.Set("FtpPassword", FtpPassword);
-
-                SetConnectedState(true);
-                await ShowAlertAsync("Başarılı", "Veritabanı ve FTP bağlantısı sağlandı, ayarlar kaydedildi.");
-            }
-            catch (MySqlException ex)
-            {
-                SetConnectedState(false);
-                await ShowAlertAsync("MySQL Hatası", $"Hata Kodu: {ex.Number}\nMesaj: {ex.Message}");
+                await ShowAlertAsync("Success", "Path saved. Synchronization started...");
             }
             catch (Exception ex)
             {
-                SetConnectedState(false);
-                await ShowAlertAsync("Hata", ex.Message);
+                await ShowAlertAsync("Error", ex.Message);
             }
             finally
             {
@@ -449,75 +518,18 @@ namespace EquipmentTracker.ViewModels
         [RelayCommand]
         async Task SelectAttachmentPath(CancellationToken cancellationToken)
         {
-            if (IsBusy) return;
-            IsBusy = true;
             try
             {
                 var result = await _folderPicker.PickAsync(cancellationToken);
                 if (result.IsSuccessful)
                 {
                     AttachmentPath = result.Folder.Path;
-                    await SaveAttachmentPath();
+                    // Otomatik kaydetme isteğe bağlı, butona basınca kaydetmesi daha güvenli
                 }
             }
-            catch (Exception ex)
-            {
-                await Shell.Current.DisplayAlert("Hata", $"Klasör seçilemedi: {ex.Message}", "Tamam");
-            }
-            finally
-            {
-                IsBusy = false;
-            }
+            catch (Exception ex) { await ShowAlertAsync("Hata", ex.Message); }
         }
 
-        /// <summary>
-        /// Ekrana girilen yeni yolu Preferences'a kaydeder.
-        /// </summary>
-        [RelayCommand]
-        async Task SaveAttachmentPath()
-        {
-            if (!IsAdminUser) // IsAdminUser property'niz zaten vardı
-            {
-                await ShowAlertAsync("Yetkisiz", "Bu ayarı sadece yöneticiler değiştirebilir.");
-                return;
-            }
-
-            if (string.IsNullOrWhiteSpace(AttachmentPath)) return;
-
-            Preferences.Set("attachment_path", AttachmentPath);
-            await ShowAlertAsync("Başarılı", "Yerel dosya yolu kaydedildi.");
-
-            if (IsBusy) return;
-            IsBusy = true;
-
-            try
-            {
-                // 1. Erişim Testi (Klasör oluşturmayı dene)
-                string testPath = Path.Combine(AttachmentPath, "Attachments");
-                if (!Directory.Exists(testPath))
-                {
-                    Directory.CreateDirectory(testPath);
-                }
-
-                // 2. Veritabanına Kaydet
-                var jobService = Application.Current.Handler.MauiContext.Services.GetService<IJobService>();
-                await jobService.SetGlobalAttachmentPathAsync(AttachmentPath);
-
-                await ShowAlertAsync("Başarılı", "Dosya yolu kaydedildi ve tüm kullanıcılara yansıtıldı.");
-            }
-            catch (UnauthorizedAccessException)
-            {
-                await ShowAlertAsync("Erişim Hatası", "Uygulamanın bu klasöre yazma izni yok. Lütfen klasör özelliklerinden 'Everyone' için 'Tam Denetim' verin.");
-            }
-            catch (Exception ex)
-            {
-                await ShowAlertAsync("Hata", $"Klasör hatası: {ex.Message}");
-            }
-            finally
-            {
-                IsBusy = false;
-            }
-        }
-
-    }
+       
+       }
 }

@@ -1,5 +1,6 @@
 ﻿using EquipmentTracker.Models;
 using EquipmentTracker.Services.Auth;
+using EquipmentTracker.Services.Job;
 using EquipmentTracker.Views;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -19,6 +20,9 @@ namespace EquipmentTracker
             _serviceProvider = serviceProvider;
 
             MainPage = new NavigationPage(serviceProvider.GetRequiredService<LoginPage>());
+
+            // İnternet durumunu dinle
+            Connectivity.Current.ConnectivityChanged += Current_ConnectivityChanged;
         }
 
         protected override Window CreateWindow(IActivationState activationState)
@@ -64,83 +68,251 @@ namespace EquipmentTracker
         // PENCERE KAPATILIRKEN (X tuşu)
         private void Window_Destroying(object sender, EventArgs e)
         {
-            _cancellationTokenSource?.Cancel(); // Kontrolü durdur
-
-            if (CurrentUser != null)
+            _cancellationTokenSource?.Cancel();
+            if (CurrentUser != null && Connectivity.Current.NetworkAccess == NetworkAccess.Internet)
             {
-                var authService = _serviceProvider.GetService<IAuthService>();
-                // Senkron bekleme ile çıkış yap
-                Task.Run(async () => await authService.LogoutAsync(CurrentUser.Id)).Wait();
+                // Sadece internet varsa DB'den düşürmeye çalış
+                try
+                {
+                    var authService = _serviceProvider.GetService<IAuthService>();
+                    Task.Run(async () => await authService.LogoutAsync(CurrentUser.Id)).Wait();
+                }
+                catch { }
             }
         }
 
         // --- YENİ: OTURUM KONTROL MEKANİZMASI ---
         private void StartSessionCheck()
         {
-            // Eski varsa iptal et
             _cancellationTokenSource?.Cancel();
             _cancellationTokenSource = new CancellationTokenSource();
             var token = _cancellationTokenSource.Token;
 
-            // Arka planda sonsuz döngü başlat
             Task.Run(async () =>
             {
                 while (!token.IsCancellationRequested)
                 {
                     try
                     {
-                        // 5 saniyede bir kontrol et
                         await Task.Delay(5000, token);
 
-                        // Eğer giriş yapmış bir kullanıcı varsa
+                        // İnternet yoksa döngüyü pas geç (Çökmemesi için)
+                        if (Connectivity.Current.NetworkAccess != NetworkAccess.Internet)
+                        {
+                            continue;
+                        }
+
                         if (CurrentUser != null)
                         {
-                            // Servisi oluştur (Scope kullanarak veritabanı çakışmasını önle)
                             using (var scope = _serviceProvider.CreateScope())
                             {
                                 var authService = scope.ServiceProvider.GetRequiredService<IAuthService>();
 
-                                // Veritabanından "IsOnline" durumunu sorgula
+                                // BURADA HATA OLABİLİR (SQL Timeout vs.) TRY-CATCH İÇİNDE KALMALI
                                 bool isActive = await authService.IsUserActiveAsync(CurrentUser.Id);
 
-                                // Eğer Admin bağlantıyı kestiyse (isActive = false)
                                 if (!isActive)
                                 {
-                                    // Ana Thread'e geç ve at
                                     await MainThread.InvokeOnMainThreadAsync(async () =>
                                     {
-                                        // Tekrar kontrol (Çakışma olmasın)
                                         if (CurrentUser != null)
                                         {
-                                            CurrentUser = null; // Kullanıcıyı düşür
-
-                                            await MainPage.DisplayAlert("Oturum Sonlandı",
-                                                "Yönetici tarafından bağlantınız kesildi.", "Tamam");
-
-                                            // Login sayfasına yönlendir
+                                            CurrentUser = null;
+                                            await MainPage.DisplayAlert("Oturum Sonlandı", "Oturumunuz sonlandırıldı.", "Tamam");
                                             var loginPage = _serviceProvider.GetRequiredService<LoginPage>();
                                             MainPage = new NavigationPage(loginPage);
                                         }
                                     });
-
-                                    // Döngüden çık (zaten çıkış yapıldı)
                                     break;
                                 }
                             }
                         }
                     }
-                    catch (OperationCanceledException)
-                    {
-                        // Uygulama kapanıyor, normal durum.
-                        break;
-                    }
+                    catch (OperationCanceledException) { break; }
                     catch (Exception ex)
                     {
-                        // Bağlantı hatası vb. olursa logla ama uygulamayı çökertme
-                        System.Diagnostics.Debug.WriteLine($"Session Check Error: {ex.Message}");
+                        // Hata olsa bile çökme, sadece logla ve devam et (veya bekle)
+                        System.Diagnostics.Debug.WriteLine($"Session Check Error (Ignored): {ex.Message}");
+                        // Hata sonrası biraz daha uzun bekle ki sürekli hata fırlatmasın
+                        await Task.Delay(5000);
                     }
                 }
             });
         }
+
+        private void StartBackgroundTasks()
+        {
+            // Eski görevleri iptal et
+            _cancellationTokenSource?.Cancel();
+            _cancellationTokenSource = new CancellationTokenSource();
+            var token = _cancellationTokenSource.Token;
+
+            // 1. Oturum Kontrol Döngüsü Başlat
+            Task.Run(() => SessionCheckLoop(token));
+
+            // 2. Dosya Senkronizasyon Döngüsü Başlat (Sadece Adminler İçin)
+            Task.Run(() => FileSyncLoop(token));
+        }
+        private async Task SessionCheckLoop(CancellationToken token)
+        {
+            while (!token.IsCancellationRequested)
+            {
+                try
+                {
+                    await Task.Delay(5000, token); // 5 saniyede bir kontrol
+
+                    // İnternet yoksa kontrol yapma (Çökmemesi için)
+                    if (Connectivity.Current.NetworkAccess != NetworkAccess.Internet) continue;
+
+                    if (CurrentUser != null)
+                    {
+                        using (var scope = _serviceProvider.CreateScope())
+                        {
+                            var authService = scope.ServiceProvider.GetRequiredService<IAuthService>();
+                            bool isActive = await authService.IsUserActiveAsync(CurrentUser.Id);
+
+                            if (!isActive)
+                            {
+                                await MainThread.InvokeOnMainThreadAsync(async () =>
+                                {
+                                    if (CurrentUser != null)
+                                    {
+                                        CurrentUser = null;
+                                        await MainPage.DisplayAlert("Oturum Sonlandı", "Oturumunuz sonlandırıldı.", "Tamam");
+                                        await PerformLocalLogoutAsync();
+                                    }
+                                });
+                                break; // Döngüden çık
+                            }
+                        }
+                    }
+                }
+                catch (OperationCanceledException) { break; }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Session Check Error: {ex.Message}");
+                    await Task.Delay(5000); // Hata alırsa biraz bekle
+                }
+            }
+        }
+
+        private async Task FileSyncLoop(CancellationToken token)
+        {
+            while (!token.IsCancellationRequested)
+            {
+                try
+                {
+                    // 1 Dakikada bir kontrol et (Süreyi ihtiyaca göre değiştirebilirsin)
+                    await Task.Delay(TimeSpan.FromMinutes(1), token);
+
+                    // İnternet yoksa veya kullanıcı yoksa veya ADMIN değilse yapma
+                    if (Connectivity.Current.NetworkAccess != NetworkAccess.Internet) continue;
+                    if (CurrentUser == null || !CurrentUser.IsAdmin) continue;
+
+                    // Senkronizasyonu Başlat
+                    using (var scope = _serviceProvider.CreateScope())
+                    {
+                        var jobService = scope.ServiceProvider.GetRequiredService<IJobService>();
+
+                        // Bu metot eksik dosyaları indirir (zaten varsa indirmez, hızlı çalışır)
+                        await jobService.SyncAllFilesFromFtpAsync();
+                    }
+                }
+                catch (OperationCanceledException) { break; }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Auto-Sync Error: {ex.Message}");
+                    await Task.Delay(10000); // Hata alırsa 10sn bekle
+                }
+            }
+        }
+
+        private void Current_ConnectivityChanged(object sender, ConnectivityChangedEventArgs e)
+        {
+            if (e.NetworkAccess != NetworkAccess.Internet)
+            {
+                // İnternet GİTTİ -> Kullanıcıyı Login'e at
+                MainThread.BeginInvokeOnMainThread(async () =>
+                {
+                    if (CurrentUser != null)
+                    {
+                        // İsteğe bağlı uyarı:
+                        // await MainPage.DisplayAlert("Bağlantı", "İnternet bağlantısı kesildi. Güvenli çıkış yapılıyor.", "Tamam");
+                        await PerformLocalLogoutAsync();
+                    }
+                });
+            }
+            else
+            {
+                // İnternet GELDİ -> Adminse hemen bir sync başlat
+                if (CurrentUser != null && CurrentUser.IsAdmin)
+                {
+                    Task.Run(async () =>
+                    {
+                        try
+                        {
+                            using (var scope = _serviceProvider.CreateScope())
+                            {
+                                var jobService = scope.ServiceProvider.GetRequiredService<IJobService>();
+                                await jobService.SyncAllFilesFromFtpAsync();
+                            }
+                        }
+                        catch { }
+                    });
+                }
+            }
+        }
+
+        private async Task PerformLocalLogoutAsync()
+        {
+            _cancellationTokenSource?.Cancel(); // Arka plan görevlerini durdur
+            CurrentUser = null; // Kullanıcıyı düşür
+
+            // Login sayfasına yönlendir
+            var loginPage = _serviceProvider.GetRequiredService<LoginPage>();
+            MainPage = new NavigationPage(loginPage);
+        }
+
+        private async Task PerformLogoutAsync()
+        {
+            if (CurrentUser == null) return;
+
+            try
+            {
+                using (var scope = _serviceProvider.CreateScope())
+                {
+                    var authService = scope.ServiceProvider.GetRequiredService<IAuthService>();
+                    await authService.LogoutAsync(CurrentUser.Id);
+                }
+            }
+            catch { }
+
+            CurrentUser = null;
+            _cancellationTokenSource?.Cancel(); // Arka plan kontrollerini durdur
+
+            var loginPage = _serviceProvider.GetRequiredService<LoginPage>();
+            MainPage = new NavigationPage(loginPage);
+        }
+
+        // Eksik dosyaları Hostinger'dan çeken metod
+        private async Task SyncMissingFilesAsync()
+        {
+            try
+            {
+                using (var scope = _serviceProvider.CreateScope())
+                {
+                    // SyncService henüz yoksa JobService içine veya yeni bir servise ekleyebiliriz.
+                    // Şimdilik IJobService üzerinden bir tetikleyici varsayalım veya direkt mantığı buraya kuralım.
+                    // En temizi bir FileSyncService oluşturmaktır ama mevcut yapıda JobService'e ekleyeceğim.
+                    var jobService = scope.ServiceProvider.GetRequiredService<IJobService>();
+                    await jobService.SyncAllFilesFromFtpAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Sync Hatası: {ex.Message}");
+            }
+        }
+
     }
 }

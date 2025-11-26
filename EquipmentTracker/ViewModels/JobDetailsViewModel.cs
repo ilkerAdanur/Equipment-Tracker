@@ -35,6 +35,7 @@ namespace EquipmentTracker.ViewModels
         JobModel _currentJob;
 
 
+
         [ObservableProperty]
         int _jobId;
 
@@ -74,6 +75,13 @@ namespace EquipmentTracker.ViewModels
             Title = "İş Detayı";
             _ftpHelper = ftpHelper;
         }
+
+        private string SanitizeFolderName(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return "Unknown";
+            return Regex.Replace(name, @"[\\/:*?""<>| ]", "_").Trim('_');
+        }
+
         [RelayCommand]
         async Task GoToHome()
         {
@@ -145,15 +153,16 @@ namespace EquipmentTracker.ViewModels
 
                 if (CurrentJob != null)
                 {
-                    await CheckAttachmentsIntegrityAsync();
-                    //Title = CurrentJob.JobName;
+                    // KRİTİK: Dosya silme kontrolünü devre dışı bırakıyoruz!
+                    // await CheckAttachmentsIntegrityAsync(); <--- BU SATIRI SİLİN VEYA YORUMA ALIN
+
+                    // Onun yerine eksik resimleri indiriyoruz
+                    _ = Task.Run(DownloadThumbnailsForCurrentJob);
+
                     JobNameDisplay = new CopyableTextViewModel(CurrentJob.JobName);
                     JobOwnerDisplay = new CopyableTextViewModel(CurrentJob.JobOwner);
                     JobDescriptionDisplay = new CopyableTextViewModel(CurrentJob.JobDescription);
-
-                    // Onay durumuna göre arayüzü kontrol edecek bool'ları ayarla
                     UpdateApprovalStatus();
-
                 }
                 else
                 {
@@ -164,6 +173,73 @@ namespace EquipmentTracker.ViewModels
             {
                 IsBusy = false;
             }
+        }
+        private async Task DownloadThumbnailsForCurrentJob()
+        {
+            if (CurrentJob == null) return;
+
+            try
+            {
+                // Yerel Yolu Bul
+                string basePath = Preferences.Get("attachment_path", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TrackerDatabase"));
+                string baseImagesPath = Path.Combine(basePath, "Attachments", "Images");
+
+                string safeJobName = SanitizeFolderName(CurrentJob.JobName);
+                string jobFolder = $"{CurrentJob.JobNumber}_{safeJobName}";
+
+                // 1. Ekipman Resimleri
+                foreach (var equip in CurrentJob.Equipments)
+                {
+                    foreach (var att in equip.Attachments)
+                    {
+                        if (string.IsNullOrEmpty(att.ThumbnailPath)) continue;
+
+                        string thumbName = Path.GetFileName(att.ThumbnailPath);
+                        string safeEquipName = SanitizeFolderName(equip.Name);
+                        string equipFolder = $"{CurrentJob.JobNumber}_{equip.EquipmentId}_{safeEquipName}";
+
+                        string localPath = Path.Combine(baseImagesPath, jobFolder, equipFolder, thumbName);
+
+                        // Dosya yoksa indir
+                        if (!File.Exists(localPath))
+                        {
+                            string ftpPath = $"Attachments/Images/{jobFolder}/{equipFolder}/{thumbName}";
+                            await _ftpHelper.DownloadFileAsync(ftpPath, localPath);
+
+                            // UI Güncelle (Eğer path değiştiyse)
+                            if (att.ThumbnailPath != localPath)
+                            {
+                                att.ThumbnailPath = localPath; // Geçici olarak view için güncelle
+                            }
+                        }
+                    }
+
+                    // 2. Parça Resimleri
+                    foreach (var part in equip.Parts)
+                    {
+                        foreach (var patt in part.Attachments)
+                        {
+                            if (string.IsNullOrEmpty(patt.ThumbnailPath)) continue;
+
+                            string thumbName = Path.GetFileName(patt.ThumbnailPath);
+                            string safeEquipName = SanitizeFolderName(equip.Name);
+                            string safePartName = SanitizeFolderName(part.Name);
+                            string equipFolder = $"{CurrentJob.JobNumber}_{equip.EquipmentId}_{safeEquipName}";
+                            string partFolder = $"{CurrentJob.JobNumber}_{equip.EquipmentId}_{part.PartId}_{safePartName}";
+
+                            string localPath = Path.Combine(baseImagesPath, jobFolder, equipFolder, partFolder, thumbName);
+
+                            if (!File.Exists(localPath))
+                            {
+                                string ftpPath = $"Attachments/Images/{jobFolder}/{equipFolder}/{partFolder}/{thumbName}";
+                                await _ftpHelper.DownloadFileAsync(ftpPath, localPath);
+                                if (patt.ThumbnailPath != localPath) patt.ThumbnailPath = localPath;
+                            }
+                        }
+                    }
+                }
+            }
+            catch { }
         }
 
         // Arayüzün durumunu güncelleyen yardımcı metot
@@ -594,6 +670,7 @@ namespace EquipmentTracker.ViewModels
 
         private async Task CheckAttachmentsIntegrityAsync()
         {
+            //if (!IsAdminUser) return;
             // Dosya yolu kontrolü (Gerekirse)
             string basePath = Preferences.Get("attachment_path", string.Empty);
             if (string.IsNullOrWhiteSpace(basePath)) return;
@@ -791,34 +868,52 @@ namespace EquipmentTracker.ViewModels
 
             try
             {
-                // Dosya yolunu tekrar hesapla
-                string baseAttachmentPath = Preferences.Get("attachment_path", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TrackerDatabase"));
-                baseAttachmentPath = Path.Combine(baseAttachmentPath, "Attachments");
+                string basePath = Preferences.Get("attachment_path", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TrackerDatabase"));
+                basePath = Path.Combine(basePath, "Attachments");
 
-                string safeJobName = Regex.Replace(CurrentJob.JobName, @"[\\/:*?""<>| ]", "_");
-                safeJobName = Regex.Replace(safeJobName, @"_+", "_").Trim('_');
-
+                string safeJobName = SanitizeFolderName(CurrentJob.JobName);
                 string jobFolder = $"{CurrentJob.JobNumber}_{safeJobName}";
                 string fileName = $"{CurrentJob.JobNumber}_{safeJobName}.xlsx";
-                string filePath = Path.Combine(baseAttachmentPath, jobFolder, fileName);
+                string filePath = Path.Combine(basePath, jobFolder, fileName);
 
-                // Dosya yoksa (belki hiç ekipman eklenmedi ama butona basıldı), şimdi oluştur
+                // 1. Yerel Kontrol
                 if (!File.Exists(filePath))
                 {
-                    await SaveExcelToDiskAsync();
+                    // 2. Yoksa İndirmeyi Dene (Sormadan dene, Excel önemlidir)
+                    if (IsBusy) return;
+                    IsBusy = true;
+
+                    try
+                    {
+                        string remotePath = $"Attachments/{jobFolder}/{fileName}";
+                        await _ftpHelper.DownloadFileAsync(remotePath, filePath);
+                    }
+                    finally { IsBusy = false; }
                 }
 
-                // Dosyayı Aç
-                await Launcher.Default.OpenAsync(new OpenFileRequest
+                // 3. Hala yoksa (ve Adminse) oluştur
+                if (!File.Exists(filePath))
                 {
-                    File = new ReadOnlyFile(filePath)
-                });
+                    //if (IsAdminUser) 
+                    //{
+                        await SaveExcelToDiskAsync();
+                    //}
+                    //else
+                    //{
+                    //    await Shell.Current.DisplayAlert("Bilgi", "Excel dosyası henüz oluşturulmamış.", "Tamam");
+                    //    return;
+                    //}
+                }
+
+                // 4. Aç
+                await Launcher.Default.OpenAsync(new OpenFileRequest { File = new ReadOnlyFile(filePath) });
             }
             catch (Exception ex)
             {
-                await Shell.Current.DisplayAlert("Hata", $"Excel açılırken hata: {ex.Message}", "Tamam");
+                await Shell.Current.DisplayAlert("Hata", $"Excel hatası: {ex.Message}", "Tamam");
             }
         }
+
 
         [RelayCommand]
         async Task ToggleEquipmentStatus(Equipment equipment)
@@ -866,30 +961,99 @@ namespace EquipmentTracker.ViewModels
 
 
         [RelayCommand]
-        async Task OpenFile(string filePath)
+        async Task OpenFile(string filePath) // Bu komut XAML'de Image TapGesture'a bağlı, parametre olarak FilePath geliyor
         {
-            if (string.IsNullOrWhiteSpace(filePath)) return;
+            if (string.IsNullOrWhiteSpace(filePath) || CurrentJob == null) return;
 
             try
             {
-                // Dosya yolunu kontrol et
-                if (!File.Exists(filePath))
+                // 1. Yerel Kontrol
+                if (File.Exists(filePath))
                 {
-                    await Application.Current.MainPage.DisplayAlert("Hata", "Dosya bulunamadı veya erişilemiyor.", "Tamam");
+                    await Launcher.OpenAsync(new OpenFileRequest { File = new ReadOnlyFile(filePath) });
                     return;
                 }
 
-                // Dosyayı varsayılan programla aç (AutoCAD, Viewer vb.)
-                await Launcher.OpenAsync(new OpenFileRequest
+                // 2. Dosya yoksa indirmeyi dene
+                bool answer = await Shell.Current.DisplayAlert("Dosya İndir", "Dosya cihazınızda bulunamadı. Sunucudan indirmek ister misiniz?", "Evet", "Hayır");
+                if (!answer) return;
+
+                if (IsBusy) return;
+                IsBusy = true; 
+
+                // 3. FTP Yolunu ve Hedef Yolu Bul
+                string fileName = Path.GetFileName(filePath);
+
+                string remotePath = "";
+                string targetLocalPath = "";
+
+                string basePath = Preferences.Get("attachment_path", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TrackerDatabase"));
+                basePath = Path.Combine(basePath, "Attachments");
+                string safeJobName = SanitizeFolderName(CurrentJob.JobName);
+                string jobFolder = $"{CurrentJob.JobNumber}_{safeJobName}";
+
+                bool found = false;
+
+                // A. Ekipmanlarda Ara
+                foreach (var eq in CurrentJob.Equipments)
                 {
-                    File = new ReadOnlyFile(filePath)
-                });
+                    if (eq.Attachments.Any(a => Path.GetFileName(a.FilePath) == fileName))
+                    {
+                        string safeEquipName = SanitizeFolderName(eq.Name);
+                        string equipFolder = $"{CurrentJob.JobNumber}_{eq.EquipmentId}_{safeEquipName}";
+
+                        remotePath = $"Attachments/{jobFolder}/{equipFolder}/{fileName}";
+                        targetLocalPath = Path.Combine(basePath, jobFolder, equipFolder, fileName);
+                        found = true;
+                        break;
+                    }
+                    // B. Parçalarda Ara
+                    foreach (var part in eq.Parts)
+                    {
+                        if (part.Attachments.Any(a => Path.GetFileName(a.FilePath) == fileName))
+                        {
+                            string safeEquipName = SanitizeFolderName(eq.Name);
+                            string safePartName = SanitizeFolderName(part.Name);
+                            string equipFolder = $"{CurrentJob.JobNumber}_{eq.EquipmentId}_{safeEquipName}";
+                            string partFolder = $"{CurrentJob.JobNumber}_{eq.EquipmentId}_{part.PartId}_{safePartName}";
+
+                            remotePath = $"Attachments/{jobFolder}/{equipFolder}/{partFolder}/{fileName}";
+                            targetLocalPath = Path.Combine(basePath, jobFolder, equipFolder, partFolder, fileName);
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (found) break;
+                }
+
+                if (found)
+                {
+                    await _ftpHelper.DownloadFileAsync(remotePath, targetLocalPath);
+
+                    if (File.Exists(targetLocalPath))
+                    {
+                        await Launcher.OpenAsync(new OpenFileRequest { File = new ReadOnlyFile(targetLocalPath) });
+                    }
+                    else
+                    {
+                        await Shell.Current.DisplayAlert("Hata", "Dosya sunucudan indirilemedi.", "Tamam");
+                    }
+                }
+                else
+                {
+                    await Shell.Current.DisplayAlert("Hata", "Dosya konumu veritabanında bulunamadı.", "Tamam");
+                }
             }
             catch (Exception ex)
             {
-                await Application.Current.MainPage.DisplayAlert("Hata", $"Dosya açılamadı: {ex.Message}", "Tamam");
+                await Shell.Current.DisplayAlert("Hata", $"Dosya açılırken hata: {ex.Message}", "Tamam");
+            }
+            finally
+            {
+                IsBusy = false;
             }
         }
+
 
     }
 }

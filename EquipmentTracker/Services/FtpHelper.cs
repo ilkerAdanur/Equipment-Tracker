@@ -19,30 +19,40 @@ namespace EquipmentTracker.Services
 
             try
             {
-                // Örn: ftp://ip_adresi/Attachments/32_Askale
                 string targetUrl = CombineFtpPath(folderPath);
-
                 WebRequest request = WebRequest.Create(targetUrl);
                 request.Method = WebRequestMethods.Ftp.MakeDirectory;
                 request.Credentials = new NetworkCredential(User, Pass);
 
-                using (var resp = (FtpWebResponse)await request.GetResponseAsync())
-                {
-                    // 250 veya 257 kodu başarılı demektir.
-                    // Klasör zaten varsa hata verebilir, catch bloğunda yutacağız.
-                }
+                using (var resp = (FtpWebResponse)await request.GetResponseAsync()) { }
             }
             catch (WebException ex)
             {
-                // Klasör zaten varsa "550" hatası döner, bu bir sorun değil.
                 FtpWebResponse response = (FtpWebResponse)ex.Response;
-                if (response.StatusCode == FtpStatusCode.ActionNotTakenFileUnavailable)
+                if (response.StatusCode == FtpStatusCode.ActionNotTakenFileUnavailable) return; // Klasör zaten var
+            }
+        }
+
+        public async Task DownloadFileAsync(string remotePath, string localPath)
+        {
+            if (string.IsNullOrEmpty(Host)) return;
+
+            try
+            {
+                string localDir = Path.GetDirectoryName(localPath);
+                if (!Directory.Exists(localDir)) Directory.CreateDirectory(localDir);
+
+                string targetUrl = CombineFtpPath(remotePath);
+
+                using (var client = new WebClient())
                 {
-                    // Klasör zaten var, devam et.
-                    return;
+                    client.Credentials = new NetworkCredential(User, Pass);
+                    await client.DownloadFileTaskAsync(new Uri(targetUrl), localPath);
                 }
-                // Diğer hatalar için loglama yapabilirsin
-                System.Diagnostics.Debug.WriteLine($"FTP Klasör Hatası: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"FTP İndirme Hatası: {ex.Message}");
             }
         }
 
@@ -60,7 +70,7 @@ namespace EquipmentTracker.Services
                 {
                     client.Credentials = new NetworkCredential(User, Pass);
                     // UploadFileTaskAsync kullanıyoruz
-                    await client.UploadFileTaskAsync(new Uri(targetUrl), WebRequestMethods.Ftp.UploadFile, localFilePath);
+                    await UploadFileWithProgressAsync(localFilePath, remoteFolderPath, null);
                 }
             }
             catch (Exception ex)
@@ -70,16 +80,40 @@ namespace EquipmentTracker.Services
             }
         }
 
-        // FTP adresini düzgün birleştirmek için yardımcı
+        public async Task UploadFileWithProgressAsync(string localFilePath, string remoteFolderPath, IProgress<double> progress)
+        {
+            if (string.IsNullOrEmpty(Host)) return;
+
+            try
+            {
+                string fileName = Path.GetFileName(localFilePath);
+                string targetUrl = CombineFtpPath(remoteFolderPath) + "/" + fileName;
+
+                using (var client = new WebClient())
+                {
+                    client.Credentials = new NetworkCredential(User, Pass);
+
+                    // İlerleme olayını dinle
+                    client.UploadProgressChanged += (s, e) =>
+                    {
+                        // Yüzdeyi 0.0 - 1.0 arasına çevirip bildir
+                        progress?.Report(e.ProgressPercentage / 100.0);
+                    };
+
+                    await client.UploadFileTaskAsync(new Uri(targetUrl), WebRequestMethods.Ftp.UploadFile, localFilePath);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"FTP Yükleme Hatası ({localFilePath}): {ex.Message}");
+                throw; // Hatayı yukarı fırlat ki Service haberdar olsun
+            }
+        }
+
         private string CombineFtpPath(string pathSuffix)
         {
-            // Host: ftp://46.202...
             string baseHost = Host.TrimEnd('/');
-
-            // PathSuffix: Attachments\32_Askale (Windows ters slash yapabilir)
-            // FTP forward slash (/) sever.
             string cleanSuffix = pathSuffix.Replace("\\", "/").TrimStart('/');
-
             return $"{baseHost}/{cleanSuffix}";
         }
     }

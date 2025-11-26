@@ -283,6 +283,110 @@ namespace EquipmentTracker.Services.Job
             }
         }
 
+        public async Task SyncAllFilesFromFtpAsync()
+        {
+            if (App.CurrentUser == null || !App.CurrentUser.IsAdmin)
+            {
+                return; 
+            }
+            try
+            {
+                string basePath = await GetGlobalAttachmentPathAsync(); 
+
+                // 1. Ekipman Dosyalarını Kontrol Et
+                var equipmentAttachments = await _context.EquipmentAttachments
+                    .Include(a => a.Equipment).ThenInclude(e => e.Job)
+                    .AsNoTracking()
+                    .ToListAsync();
+
+                foreach (var att in equipmentAttachments)
+                {
+                    if (att.Equipment?.Job == null) continue;
+
+                    // Klasör Yollarını Hesapla
+                    string safeJobName = SanitizeFolderName(att.Equipment.Job.JobName);
+                    string safeEquipName = SanitizeFolderName(att.Equipment.Name);
+
+                    string jobFolder = $"{att.Equipment.Job.JobNumber}_{safeJobName}";
+                    string equipFolder = $"{att.Equipment.Job.JobNumber}_{att.Equipment.EquipmentId}_{safeEquipName}";
+
+                    // A. Ana Dosya
+                    string localFilePath = att.FilePath; // Veritabanındaki yol (eğer tam yolsa)
+                                                         // Not: Veritabanındaki yol farklı bir bilgisayara ait olabilir.
+                                                         // Doğrusu: Yolu dinamik olarak yeniden oluşturmaktır.
+                    string expectedLocalPath = Path.Combine(basePath, jobFolder, equipFolder, att.FileName);
+                    string ftpFilePath = $"Attachments/{jobFolder}/{equipFolder}/{att.FileName}";
+
+                    if (!File.Exists(expectedLocalPath))
+                    {
+                        await _ftpHelper.DownloadFileAsync(ftpFilePath, expectedLocalPath);
+                    }
+
+                    // B. Thumbnail (Varsa) - YENİ IMAGES KLASÖRÜNE GÖRE
+                    if (!string.IsNullOrEmpty(att.ThumbnailPath))
+                    {
+                        string thumbName = Path.GetFileName(att.ThumbnailPath);
+                        string expectedThumbPath = Path.Combine(basePath, "Images", jobFolder, equipFolder, thumbName);
+                        string ftpThumbPath = $"Attachments/Images/{jobFolder}/{equipFolder}/{thumbName}";
+
+                        if (!File.Exists(expectedThumbPath))
+                        {
+                            await _ftpHelper.DownloadFileAsync(ftpThumbPath, expectedThumbPath);
+                        }
+                    }
+                }
+
+                // 2. Parça Dosyalarını Kontrol Et (Benzer mantık)
+                var partAttachments = await _context.EquipmentPartAttachments
+                    .Include(pa => pa.EquipmentPart).ThenInclude(p => p.Equipment).ThenInclude(e => e.Job)
+                    .AsNoTracking()
+                    .ToListAsync();
+
+                foreach (var patt in partAttachments)
+                {
+                    if (patt.EquipmentPart?.Equipment?.Job == null) continue;
+
+                    var job = patt.EquipmentPart.Equipment.Job;
+                    var equip = patt.EquipmentPart.Equipment;
+                    var part = patt.EquipmentPart;
+
+                    string safeJobName = SanitizeFolderName(job.JobName);
+                    string safeEquipName = SanitizeFolderName(equip.Name);
+                    string safePartName = SanitizeFolderName(part.Name);
+
+                    string jobFolder = $"{job.JobNumber}_{safeJobName}";
+                    string equipFolder = $"{job.JobNumber}_{equip.EquipmentId}_{safeEquipName}";
+                    string partFolder = $"{job.JobNumber}_{equip.EquipmentId}_{part.PartId}_{safePartName}";
+
+                    // A. Ana Dosya
+                    string expectedLocalPath = Path.Combine(basePath, jobFolder, equipFolder, partFolder, patt.FileName);
+                    string ftpFilePath = $"Attachments/{jobFolder}/{equipFolder}/{partFolder}/{patt.FileName}";
+
+                    if (!File.Exists(expectedLocalPath))
+                    {
+                        await _ftpHelper.DownloadFileAsync(ftpFilePath, expectedLocalPath);
+                    }
+
+                    // B. Thumbnail - Images Klasörüne Göre
+                    if (!string.IsNullOrEmpty(patt.ThumbnailPath))
+                    {
+                        string thumbName = Path.GetFileName(patt.ThumbnailPath);
+                        string expectedThumbPath = Path.Combine(basePath, "Images", jobFolder, equipFolder, partFolder, thumbName);
+                        string ftpThumbPath = $"Attachments/Images/{jobFolder}/{equipFolder}/{partFolder}/{thumbName}";
+
+                        if (!File.Exists(expectedThumbPath))
+                        {
+                            await _ftpHelper.DownloadFileAsync(ftpThumbPath, expectedThumbPath);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Sync Error: {ex.Message}");
+            }
+        }
+
         public async Task DeleteJobAsync(int jobId)
         {
             var job = await _context.Jobs.FindAsync(jobId);
