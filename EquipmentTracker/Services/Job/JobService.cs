@@ -3,6 +3,7 @@ using EquipmentTracker.Data;
 using EquipmentTracker.Models;
 using EquipmentTracker.Models.Enums;
 using Microsoft.EntityFrameworkCore;
+using MySqlConnector;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
@@ -227,61 +228,86 @@ namespace EquipmentTracker.Services.Job
 
         public async Task AddJobAsync(JobModel newJob)
         {
-            using var transaction = await _context.Database.BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted);
+            int maxRetries = 3; // En fazla 3 kere dene
+            int currentRetry = 0;
+            bool success = false;
 
-            try
+            while (currentRetry < maxRetries && !success)
             {
-                // 1. İş Numarası Verme (AYNI)
-                var allJobs = await _context.Jobs.Select(j => j.JobNumber).ToListAsync();
-                int maxNumber = 0;
-                if (allJobs.Any())
-                {
-                    foreach (var numStr in allJobs)
-                    {
-                        if (int.TryParse(numStr, out int num))
-                        {
-                            if (num > maxNumber) maxNumber = num;
-                        }
-                    }
-                }
-                newJob.JobNumber = (maxNumber + 1).ToString();
+                // Transaction her denemede yeni oluşturulmalı
+                using var transaction = await _context.Database.BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted);
 
-                // 2. Veritabanına Kayıt (AYNI)
-                _context.Jobs.Add(newJob);
-                await _context.SaveChangesAsync();
-
-                // 3. KLASÖR OLUŞTURMA (DÜZELTİLDİ)
                 try
                 {
-                    string baseAttachmentPath = await GetGlobalAttachmentPathAsync(); // Yerel yol
-                    string safeJobName = SanitizeFolderName(newJob.JobName);
-                    string jobFolder = $"{newJob.JobNumber}_{safeJobName}";
+                    // 1. En Son İş Numarasını Al
+                    var lastJob = await _context.Jobs
+                        .OrderByDescending(j => j.Id)
+                        .FirstOrDefaultAsync();
 
-                    string localTargetDirectory = Path.Combine(baseAttachmentPath, jobFolder);
-
-                    if (!Directory.Exists(localTargetDirectory))
+                    int nextJobNumber = 1;
+                    if (lastJob != null && int.TryParse(lastJob.JobNumber, out int lastNum))
                     {
-                        Directory.CreateDirectory(localTargetDirectory);
+                        nextJobNumber = lastNum + 1;
                     }
 
-                    // B. FTP KLASÖRÜ (YENİ)
-                    // FTP'de önce "Attachments" klasörünü garantiye alalım, sonra iş klasörünü.
-                    await _ftpHelper.CreateDirectoryAsync("Attachments");
-                    await _ftpHelper.CreateDirectoryAsync($"Attachments/{jobFolder}");
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"Job klasörü oluşturulamadı: {ex.Message}");
-                }
+                    newJob.JobNumber = nextJobNumber.ToString();
 
-                await transaction.CommitAsync();
-            }
-            catch
-            {
-                await transaction.RollbackAsync();
-                throw;
+                    // 2. Veritabanına Kayıt
+                    _context.Jobs.Add(newJob);
+                    await _context.SaveChangesAsync();
+
+                    // 3. Klasör Oluşturma (Sadece ilk başarılı kayıtta çalışır)
+                    try
+                    {
+                        string baseAttachmentPath = await GetGlobalAttachmentPathAsync();
+                        string safeJobName = SanitizeFolderName(newJob.JobName);
+                        string jobFolder = $"{newJob.JobNumber}_{safeJobName}";
+
+                        string localTargetDirectory = Path.Combine(baseAttachmentPath, jobFolder);
+                        if (!Directory.Exists(localTargetDirectory)) Directory.CreateDirectory(localTargetDirectory);
+
+                        await _ftpHelper.CreateDirectoryAsync("Attachments");
+                        await _ftpHelper.CreateDirectoryAsync($"Attachments/{jobFolder}");
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Job klasör hatası: {ex.Message}");
+                    }
+
+                    await transaction.CommitAsync();
+                    success = true; // Döngüden çık
+                }
+                catch (DbUpdateException ex)
+                {
+                    // Eğer hata "Duplicate Entry" (Aynı kayıt var) ise
+                    // MySQL Hata Kodu 1062: Duplicate entry
+                    if (ex.InnerException is MySqlException sqlEx && sqlEx.Number == 1062)
+                    {
+                        await transaction.RollbackAsync();
+                        currentRetry++;
+
+                        // EF Core takibi temizle ki sonraki turda çakışmasın
+                        _context.Entry(newJob).State = EntityState.Detached;
+
+                        if (currentRetry >= maxRetries) throw; // Deneme hakkı bitti, hatayı fırlat
+
+                        // Kısa bir süre bekle (100ms - 500ms arası rastgele)
+                        await Task.Delay(new Random().Next(100, 500));
+                    }
+                    else
+                    {
+                        await transaction.RollbackAsync();
+                        throw; // Başka bir hataysa direkt fırlat
+                    }
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
             }
         }
+
 
         public async Task SyncAllFilesFromFtpAsync()
         {

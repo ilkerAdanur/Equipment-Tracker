@@ -15,7 +15,7 @@
     <ScrollView>
         <VerticalStackLayout HorizontalOptions="Center" Padding="0,10,0,20" Spacing="15" >
 
-            <Frame BorderColor="{Binding StatusColor}" BackgroundColor="#F5F5F5" Padding="15"  HorizontalOptions="Center">
+            <Frame BorderColor="{Binding StatusColor}" BackgroundColor="White" Padding="15"  HorizontalOptions="Center">
                 <Label Text="{Binding StatusText}" 
                        TextColor="{Binding StatusColor}" 
                        FontSize="Large" 
@@ -28,38 +28,44 @@
                     <Label Text="Veritabanı Giriş Bilgileri (MySQL)" FontSize="Medium" FontAttributes="Bold" TextColor="Black"/>
 
                     <VerticalStackLayout>
-                        <Label Text="Sunucu IP / Host:" TextColor="Gray" FontSize="Micro"/>
+                        <Label Text="Sunucu IP / Host:" TextColor="White" FontSize="Micro"/>
                         <Entry Text="{Binding ServerIp}" 
                                IsEnabled="{Binding IsInputsEnabled}"
                                Placeholder="46.202.xxx.xxx veya mysql.hostinger..." 
                                TextColor="White"
+                               Background="Black"
                                BackgroundColor="{Binding IsInputsEnabled, Converter={toolkit:BoolToObjectConverter TrueObject=Transparent, FalseObject=#EEEEEE}}"/>
                     </VerticalStackLayout>
 
                     <VerticalStackLayout>
-                        <Label Text="Veritabanı Adı (DB Name):" TextColor="Gray" FontSize="Micro"/>
+                        <Label Text="Veritabanı Adı (DB Name):" TextColor="White" FontSize="Micro"/>
                         <Entry Text="{Binding DbName}" 
                                IsEnabled="{Binding IsInputsEnabled}"
                                Placeholder="u993098094_TrackerDB" 
                                TextColor="White"
+                               Background="Black"
                                BackgroundColor="{Binding IsInputsEnabled, Converter={toolkit:BoolToObjectConverter TrueObject=Transparent, FalseObject=#EEEEEE}}"/>
                     </VerticalStackLayout>
 
                     <VerticalStackLayout>
-                        <Label Text="Veritabanı Kullanıcısı:" TextColor="Gray" FontSize="Micro"/>
+                        <Label Text="Veritabanı Kullanıcısı:" TextColor="White" FontSize="Micro"/>
                         <Entry Text="{Binding DbUser}" 
                                IsEnabled="{Binding IsInputsEnabled}"
                                Placeholder="u993098094_trackeruser" 
                                TextColor="White" 
+                               Background="Black"
+                               
                                BackgroundColor="{Binding IsInputsEnabled, Converter={toolkit:BoolToObjectConverter TrueObject=Transparent, FalseObject=#EEEEEE}}"/>
                     </VerticalStackLayout>
 
                     <VerticalStackLayout>
-                        <Label Text="Şifre:" TextColor="Gray" FontSize="Micro"/>
+                        <Label Text="Şifre:" TextColor="White" FontSize="Micro"/>
                         <Entry Text="{Binding DbPassword}" 
                                IsEnabled="{Binding IsInputsEnabled}"
                                IsPassword="True" 
                                TextColor="White"
+                               Background="Black"
+                               
                                BackgroundColor="{Binding IsInputsEnabled, Converter={toolkit:BoolToObjectConverter TrueObject=Transparent, FalseObject=#EEEEEE}}"/>
                     </VerticalStackLayout>
 
@@ -143,7 +149,7 @@
                                    IsEnabled="True" 
                                    Placeholder="Henüz ayarlanmadı..." 
                                    TextColor="Black"
-                                   BackgroundColor="#F5F5F5"/>
+                                   BackgroundColor="White"/>
 
                             <Button Grid.Column="1" 
                                     Text="📂" 

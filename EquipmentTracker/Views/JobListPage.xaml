@@ -32,7 +32,7 @@
         </CollectionView.Header>
 
         <CollectionView.ItemTemplate>
-            <DataTemplate x:DataType="models:JobModel">
+            <DataTemplate x:DataType="models:JobModel" >
                 <Frame BorderColor="Black"
                        CornerRadius="5"
                        Padding="0"
@@ -59,24 +59,23 @@
                                    VerticalOptions="Center"
                                    TextColor="Black"
                                    HorizontalOptions="End"
-                                   Margin="0,17,95,0"/>
+                                   Margin="0,17,70,0"/>
                         </VerticalStackLayout>
 
                         
                         <Button Grid.Column="1"
-
                                 HeightRequest="20"
                                 WidthRequest="68"
                                 FontSize="Caption"
                                 FontAttributes="Bold"
                                 VerticalOptions="Center"
                                 HorizontalOptions="End"
-                                Margin="0,0,10,0"
-                                
+                                Margin="0,47,70,0"
                                 Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobListViewModel}}, Path=ToggleJobStatusCommand}"
                                 CommandParameter="{Binding .}"
                                 
                                 >
+                        
 
                             <Button.Triggers>
                                 <DataTrigger TargetType="Button" Binding="{Binding IsCancelled}" Value="True">
@@ -90,7 +89,21 @@
                                 </DataTrigger>
                             </Button.Triggers>
                         </Button>
-                    
+
+                        <Button Grid.Column="2"
+                                HeightRequest="20"
+                                WidthRequest="60"
+                                FontSize="Caption"
+                                FontAttributes="Bold"
+                                VerticalOptions="Center"
+                                HorizontalOptions="End"
+                                Margin="0,45,5,0"
+                                Text="Sil"
+                                BackgroundColor="Red"
+                                TextColor="White"
+                                Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobListViewModel}}, Path=DeleteJobCommand}"
+                                CommandParameter="{Binding .}" />
+
                     </Grid>
                 </Frame>
             </DataTemplate>

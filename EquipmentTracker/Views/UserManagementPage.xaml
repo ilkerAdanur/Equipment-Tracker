@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:EquipmentTracker.ViewModels"
+             xmlns:models="clr-namespace:EquipmentTracker.Models"
+             xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
+             x:Class="EquipmentTracker.Views.UserManagementPage"
+             x:DataType="vm:UserManagementViewModel"
+             Title="{Binding Title}"
+             BackgroundColor="White">
+
+    <Grid RowDefinitions="Auto, *">
+        <Frame Grid.Row="0" Margin="10" Padding="10" BackgroundColor="#F0F0F0" BorderColor="Gray">
+            <VerticalStackLayout Spacing="10">
+                <Label Text="Yeni Kullanıcı Ekle" FontAttributes="Bold" TextColor="Black"/>
+
+                <Grid ColumnDefinitions="*, *, *">
+                    <Entry Grid.Column="0" Placeholder="Kullanıcı Adı" Text="{Binding NewUsername}" BackgroundColor="White" TextColor="Black" PlaceholderColor="Gray"/>
+                    <Entry Grid.Column="1" Placeholder="Ad Soyad" Text="{Binding NewFullName}" Margin="5,0" BackgroundColor="White" TextColor="Black" PlaceholderColor="Gray"/>
+                    <Entry Grid.Column="2" Placeholder="Şifre" Text="{Binding NewPassword}" IsPassword="True" BackgroundColor="White" TextColor="Black" PlaceholderColor="Gray"/>
+                </Grid>
+
+                <Grid ColumnDefinitions="Auto, *">
+                    <HorizontalStackLayout Grid.Column="0" Spacing="5" VerticalOptions="Center">
+                        <CheckBox IsChecked="{Binding NewIsAdmin}" Color="{StaticResource Primary}"/>
+                        <Label Text="Yönetici (Admin)" VerticalOptions="Center" TextColor="Black"/>
+                    </HorizontalStackLayout>
+
+                    <Button Grid.Column="1" Text="KULLANICIYI KAYDET" Command="{Binding AddUserCommand}" HorizontalOptions="End" BackgroundColor="{StaticResource Primary}" TextColor="White" FontAttributes="Bold"/>
+                </Grid>
+            </VerticalStackLayout>
+        </Frame>
+
+        <CollectionView Grid.Row="1" ItemsSource="{Binding Users}" Margin="10">
+            <CollectionView.Header>
+                <Grid ColumnDefinitions="50, *, *, *, 80" Padding="5" BackgroundColor="Gray">
+                    <Label Grid.Column="0" Text="ID" TextColor="White" FontAttributes="Bold"/>
+                    <Label Grid.Column="1" Text="Kullanıcı" TextColor="White" FontAttributes="Bold"/>
+                    <Label Grid.Column="2" Text="Rol" TextColor="White" FontAttributes="Bold"/>
+                    <Label Grid.Column="3" Text="Son Görülme" TextColor="White" FontAttributes="Bold"/>
+                    <Label Grid.Column="4" Text="İşlem" TextColor="White" FontAttributes="Bold"/>
+                </Grid>
+            </CollectionView.Header>
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="models:Users">
+                    <Grid ColumnDefinitions="50, *, *, *, 80" Padding="5" BackgroundColor="White">
+                        <Label Grid.Column="0" Text="{Binding Id}" VerticalOptions="Center" TextColor="Black"/>
+
+                        <VerticalStackLayout Grid.Column="1" VerticalOptions="Center">
+                            <Label Text="{Binding FullName}" FontAttributes="Bold" TextColor="Black"/>
+                            <Label Text="{Binding Username}" FontSize="Micro" TextColor="Gray"/>
+                        </VerticalStackLayout>
+
+                        <Label Grid.Column="2" Text="{Binding IsAdmin, Converter={toolkit:BoolToObjectConverter TrueObject='Yönetici', FalseObject='Kullanıcı'}}" 
+                               VerticalOptions="Center" TextColor="{Binding IsAdmin, Converter={toolkit:BoolToObjectConverter TrueObject='Red', FalseObject='Black'}}"/>
+
+                        <!--<VerticalStackLayout Grid.Column="3" VerticalOptions="Center">
+                            <Label Text="{Binding LastActive, StringFormat='{0:dd.MM HH:mm}'}" FontSize="Small" TextColor="Black"/>
+                        </VerticalStackLayout>-->
+
+                        <Button Grid.Column="4" Text="Sil" BackgroundColor="Red" TextColor="White" HeightRequest="30" FontSize="Small" Padding="0"
+                                Command="{Binding Source={RelativeSource AncestorType={x:Type vm:UserManagementViewModel}}, Path=DeleteUserCommand}"
+                                CommandParameter="{Binding .}"/>
+                    </Grid>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+
+        <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}" HorizontalOptions="Center" VerticalOptions="Center" Grid.RowSpan="2" Color="{StaticResource Primary}"/>
+    </Grid>
+</ContentPage>

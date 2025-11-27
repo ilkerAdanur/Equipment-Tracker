@@ -11,6 +11,7 @@ using EquipmentTracker.Services.EquipmentService;
 using EquipmentTracker.Services.Job;
 using EquipmentTracker.Services.StatisticsService;
 using EquipmentTracker.Services.StatisticsServices;
+using EquipmentTracker.Services.UserService;
 using EquipmentTracker.ViewModels;
 using EquipmentTracker.Views;
 using Microsoft.EntityFrameworkCore;
@@ -67,10 +68,12 @@ public static class MauiProgram
         builder.Services.AddTransient<IEquipmentPartAttachmentService, EquipmentPartAttachmentService>();
         builder.Services.AddTransient<IStatisticsService, StatisticsService>();
         builder.Services.AddTransient<IAuthService, AuthService>();
+        builder.Services.AddTransient<IUserService, UserService>();
 
         builder.Services.AddSingleton<FtpHelper>();
         builder.Services.AddSingleton<IFolderPicker>(FolderPicker.Default);
 
+        builder.Services.AddTransient<UserManagementViewModel>();
         builder.Services.AddTransient<LoginViewModel>();
         builder.Services.AddTransient<LoginPage>();
         builder.Services.AddTransient<JobDetailsViewModel>();
@@ -79,6 +82,7 @@ public static class MauiProgram
         builder.Services.AddTransient<DashboardViewModel>();
         builder.Services.AddTransient<SettingsViewModel>();
 
+        builder.Services.AddTransient<UserManagementPage>();
         builder.Services.AddTransient<JobDetailsPage>();
         builder.Services.AddTransient<AddNewJobPage>();
         builder.Services.AddTransient<JobListPage>();

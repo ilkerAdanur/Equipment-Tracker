@@ -36,12 +36,20 @@
                 Route="SettingsPage" />
         </Tab>
 
+        <Tab x:Name="AdminTab" Title="Kullanıcı Yönetim" IsVisible="False">
+            <ShellContent
+                Title="Kullanıcı Yönetim"
+                ContentTemplate="{DataTemplate local:UserManagementPage}"
+                Route="UserManagementPage" />
+        </Tab>
+
         <Tab Title="Hakkında">
             <ShellContent
                 Title="Hakkında"
                 ContentTemplate="{DataTemplate local:AboutPage}"
                 Route="AboutPage" />
         </Tab>
+        
 
     </TabBar>
 

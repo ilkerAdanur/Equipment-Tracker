@@ -81,6 +81,13 @@ namespace EquipmentTracker.ViewModels
             LoadSettings();
         }
 
+        [RelayCommand]
+        async Task GoToUserManagement()
+        {
+            var page = _serviceProvider.GetService<UserManagementPage>();
+            await Application.Current.MainPage.Navigation.PushAsync(page);
+        }
+
         public void RefreshUserStatus()
         {
             IsUserLoggedIn = App.CurrentUser != null;

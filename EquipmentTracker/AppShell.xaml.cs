@@ -1,7 +1,4 @@
-﻿// Dosya: AppShell.xaml.cs
-using EquipmentTracker.Views;
-
-namespace EquipmentTracker
+﻿namespace EquipmentTracker
 {
     public partial class AppShell : Shell
     {
@@ -9,12 +6,16 @@ namespace EquipmentTracker
         {
             InitializeComponent();
 
-            // Yeni rotaları (sayfaları) sisteme tanıt
-            Routing.RegisterRoute(nameof(JobDetailsPage), typeof(JobDetailsPage));
-            Routing.RegisterRoute(nameof(AddNewJobPage), typeof(AddNewJobPage));
-            Routing.RegisterRoute(nameof(SettingsPage), typeof(SettingsPage)); // <-- YENİ EKLEYİN
-
+            // Admin Kontrolü
+            var currentUser = App.CurrentUser;
+            if (currentUser != null && currentUser.IsAdmin)
+            {
+                AdminTab.IsVisible = true; // Admin ise göster
+            }
+            else
+            {
+                AdminTab.IsVisible = false; // Değilse gizle
+            }
         }
-        
     }
 }

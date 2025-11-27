@@ -2,7 +2,6 @@
 
 namespace EquipmentTracker.Models
 {
-    // 'partial' ve 'ObservableObject' olması şart
     public partial class Users : ObservableObject
     {
         public int Id { get; set; }

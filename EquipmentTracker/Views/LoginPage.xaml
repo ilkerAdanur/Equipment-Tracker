@@ -7,7 +7,7 @@
              Title="Giriş Yap"
              BackgroundColor="#f4f4f4">
 
-    <Grid>
+    <Grid BackgroundColor="Black">
         <VerticalStackLayout VerticalOptions="Center" Padding="30" Spacing="20" Background="Black">
 
             <Image  Source="logo.png" HeightRequest="100" WidthRequest="100" HorizontalOptions="Center"/>
@@ -19,7 +19,7 @@
                    TextColor="{StaticResource Primary}"/>
 
             <Frame CornerRadius="10" Padding="0" HasShadow="True" BorderColor="Transparent">
-                <VerticalStackLayout BackgroundColor="White" Padding="15" Spacing="15">
+                <VerticalStackLayout BackgroundColor="White" Padding="15" Spacing="15"  WidthRequest="600">
 
                     <VerticalStackLayout>
                         <Label Text="Kullanıcı Adı" TextColor="Gray" FontSize="Small"/>
@@ -37,7 +37,9 @@
                             TextColor="White"
                             CornerRadius="20"
                             HeightRequest="50"
-                            FontAttributes="Bold"/>
+                            FontAttributes="Bold"
+                            
+                            />
 
                     <ActivityIndicator IsRunning="{Binding IsBusy}" Color="{StaticResource Primary}"/>
                 </VerticalStackLayout>
@@ -48,6 +50,7 @@
                     BackgroundColor="White" 
                     TextColor="Red" 
                     FontSize="Small"
+                    WidthRequest="600"
                     />
 
         </VerticalStackLayout>
