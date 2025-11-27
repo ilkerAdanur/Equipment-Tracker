@@ -272,7 +272,7 @@ namespace EquipmentTracker.Services.AttachmentServices
         // --- YENİ EKLENEN UPDATE METODU ---
         public async Task<EquipmentAttachment> UpdateAttachmentAsync(EquipmentAttachment existingAttachment, JobModel parentJob, Equipment parentEquipment, FileResult newFile)
         {
-            // 1. Yerel Yollar
+            // 1. Klasör Yollarını Hazırla
             string dbPath = GetBaseDatabasePath();
             string baseAttachmentPath = Path.Combine(dbPath, "Attachments");
 
@@ -284,51 +284,92 @@ namespace EquipmentTracker.Services.AttachmentServices
             string targetDirectory = Path.Combine(baseAttachmentPath, jobFolder, equipFolder);
             if (!Directory.Exists(targetDirectory)) Directory.CreateDirectory(targetDirectory);
 
-            // 2. Eski Dosyayı Sil (Local)
+            // 2. Eski Dosyayı Silme Kontrolü
+            // Eğer dosya ismi değiştiyse eski dosyayı silmeye çalışırız.
+            // Ancak dosya açıksa hata verebilir, bunu "try-catch" ile yutalım ki işlem durmasın.
             string oldLocalPath = "";
             if (!string.IsNullOrEmpty(existingAttachment.FilePath))
             {
                 string relativePath = existingAttachment.FilePath.Replace("/", Path.DirectorySeparatorChar.ToString());
                 oldLocalPath = Path.Combine(dbPath, relativePath);
             }
-            else
+
+            if (existingAttachment.FileName != newFile.FileName && File.Exists(oldLocalPath))
             {
-                oldLocalPath = existingAttachment.FilePath;
+                try { File.Delete(oldLocalPath); } catch { /* Dosya silinemezse de devam et */ }
             }
 
-            if (File.Exists(oldLocalPath)) { try { File.Delete(oldLocalPath); } catch { } }
-
-            // Eski Thumbnail'i de temizle (Local cache veya temp)
+            // Thumbnail silme (Önemsiz, hata verirse geç)
             if (!string.IsNullOrEmpty(existingAttachment.ThumbnailPath) && File.Exists(existingAttachment.ThumbnailPath))
             {
                 try { File.Delete(existingAttachment.ThumbnailPath); } catch { }
             }
 
-            // 3. Yeni Dosyayı Kopyala
-            string uniqueFilePath = GetUniqueFilePath(targetDirectory, newFile.FileName);
-            string uniqueFileName = Path.GetFileName(uniqueFilePath);
+            // 3. Yeni Dosyayı Kopyala (KİLİTLENME KONTROLÜ)
+            string finalFilePath;
+            string finalFileName;
+
+            if (existingAttachment.FileName == newFile.FileName)
+            {
+                // İsim aynı: Üzerine yazılacak
+                finalFilePath = Path.Combine(targetDirectory, newFile.FileName);
+                finalFileName = newFile.FileName;
+
+                // --- KRİTİK DÜZELTME ---
+                // Dosya varsa silmeyi dene. Eğer dosya açıksa hata fırlat ve kullanıcıyı uyar.
+                if (File.Exists(finalFilePath))
+                {
+                    try
+                    {
+                        File.Delete(finalFilePath);
+                    }
+                    catch (IOException)
+                    {
+                        // Bu hata ViewModel'e gidecek ve ekranda Alert olarak görünecek
+                        throw new Exception($"'{finalFileName}' dosyası şu anda açık! Lütfen dosyayı kapatıp tekrar deneyin.");
+                    }
+                    catch (UnauthorizedAccessException)
+                    {
+                        throw new Exception($"'{finalFileName}' dosyasını değiştirmek için yetkiniz yok.");
+                    }
+                }
+            }
+            else
+            {
+                // İsim farklı: Benzersiz isim oluştur
+                finalFilePath = GetUniqueFilePath(targetDirectory, newFile.FileName);
+                finalFileName = Path.GetFileName(finalFilePath);
+            }
 
             using (var sourceStream = await newFile.OpenReadAsync())
-            using (var targetStream = File.Create(uniqueFilePath))
+            using (var targetStream = File.Create(finalFilePath))
             {
                 await sourceStream.CopyToAsync(targetStream);
             }
 
-            // 4. DB Güncelle (Thumbnail'i sıfırla ki yenisi gelsin)
-            string ftpRelativePath = $"Attachments/{jobFolder}/{equipFolder}/{uniqueFileName}";
+            // 4. Veritabanı Güncelle
+            string ftpRelativePath = $"Attachments/{jobFolder}/{equipFolder}/{finalFileName}";
 
-            existingAttachment.FileName = uniqueFileName;
+            existingAttachment.FileName = finalFileName;
             existingAttachment.FilePath = ftpRelativePath;
             existingAttachment.ThumbnailPath = null;
             existingAttachment.IsProcessing = true;
             existingAttachment.ProcessingProgress = 0;
 
-            _context.EquipmentAttachments.Update(existingAttachment);
-            await _context.SaveChangesAsync();
-            _context.Entry(existingAttachment).State = EntityState.Detached;
+            try
+            {
+                _context.EquipmentAttachments.Update(existingAttachment);
+                await _context.SaveChangesAsync();
+                _context.Entry(existingAttachment).State = EntityState.Detached;
 
-            // 5. Arka Plan İşlemini Başlat (Resmi yeniden oluşturacak)
-            _ = Task.Run(() => ProcessAttachmentInBackground(existingAttachment, uniqueFilePath, ftpRelativePath, parentJob, parentEquipment));
+                // 5. Arka Plan İşlemi
+                _ = Task.Run(() => ProcessAttachmentInBackground(existingAttachment, finalFilePath, ftpRelativePath, parentJob, parentEquipment));
+            }
+            catch (Exception)
+            {
+                existingAttachment.IsProcessing = false;
+                throw;
+            }
 
             return existingAttachment;
         }

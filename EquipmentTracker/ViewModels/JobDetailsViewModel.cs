@@ -92,54 +92,42 @@ namespace EquipmentTracker.ViewModels
             LoadJobDetailsCommand.Execute(value);
         }
         [RelayCommand]
-        async Task CopyToClipboard(object textToCopyObj)
+        async Task CopyToClipboard(string text)
         {
-            if (textToCopyObj == null)
-                return;
+            if (string.IsNullOrWhiteSpace(text)) return;
 
-            string? textToCopy = string.Empty;
+            string textToCopy = text;
 
-            // Gelen verinin tipini kontrol et
-            if (textToCopyObj is DateTime dateTime)
+            // Eğer kopyalanan metin bir dosya yolu ise ve "Attachments" içeriyorsa formatla
+            // Örn: Attachments/52_Deneme52/52_1_d1/pernolar.dwg -> 52_1_d1_pernolar.dwg
+            if (text.Contains("/") || text.Contains("\\"))
             {
-                // Tarihi istediğimiz formatta string'e çevir
-                textToCopy = dateTime.ToString("dd.MM.yyyy");
-            }
-            else
-            {
-                // Diğer her şeyi string olarak kabul et
-                textToCopy = textToCopyObj.ToString();
-            }
+                // Ters slashları düze çevir
+                string normalized = text.Replace("\\", "/");
 
-            if (string.IsNullOrEmpty(textToCopy))
-                return;
-
-            await Clipboard.SetTextAsync(textToCopy);
-
-            var popup = new Popup
-            {
-                Content = new VerticalStackLayout
+                if (normalized.StartsWith("Attachments/"))
                 {
-                    Padding = 10,
-                    BackgroundColor = Colors.Black.WithAlpha(0.8f),
-                    Children =
-            {
-                new Label
-                {
-                    Text = "Kopyalandı ✔️",
-                    TextColor = Colors.White,
-                    FontSize = 16,
-                    HorizontalOptions = LayoutOptions.Center
+                    var parts = normalized.Split('/');
+
+                    // Ekipman Dosyası Formatı: Attachments/Job/Equip/File
+                    if (parts.Length >= 4)
+                    {
+                        // Son klasör (Ekipman veya Parça klasörü)
+                        string lastFolder = parts[parts.Length - 2];
+                        // Dosya adı
+                        string fileName = parts[parts.Length - 1];
+
+                        textToCopy = $"{lastFolder}_{fileName}";
+                    }
                 }
             }
-                }
-            };
 
-            Application.Current.MainPage.ShowPopup(popup);
+            await Clipboard.Default.SetTextAsync(textToCopy);
 
-            await Task.Delay(1500);
-            popup.Close();
+            if (Application.Current?.MainPage != null)
+                await Application.Current.MainPage.DisplayAlert("Kopyalandı", $"'{textToCopy}' panoya kopyalandı.", "Tamam");
         }
+
 
         [RelayCommand]
         public async Task LoadJobDetailsAsync(int jobId)
@@ -154,10 +142,7 @@ namespace EquipmentTracker.ViewModels
                 if (CurrentJob != null)
                 {
 
-                    if (IsAdminUser)
-                    {
-                        _ = Task.Run(DownloadThumbnailsForCurrentJob);
-                    }
+                    _ = Task.Run(DownloadThumbnailsForCurrentJob);
 
                     JobNameDisplay = new CopyableTextViewModel(CurrentJob.JobName);
                     JobOwnerDisplay = new CopyableTextViewModel(CurrentJob.JobOwner);

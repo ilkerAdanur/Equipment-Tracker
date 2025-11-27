@@ -173,7 +173,7 @@ namespace EquipmentTracker.Services.EquipmentPartAttachmentServices
 
         public async Task<EquipmentPartAttachment> UpdateAttachmentAsync(EquipmentPartAttachment existingAttachment, JobModel parentJob, Equipment parentEquipment, EquipmentPart parentPart, FileResult newFile)
         {
-            // 1. Klasörleri Hazırla
+            // 1. Klasörler
             string dbPath = GetBaseDatabasePath();
             string baseAttachmentPath = Path.Combine(dbPath, "Attachments");
 
@@ -188,7 +188,7 @@ namespace EquipmentTracker.Services.EquipmentPartAttachmentServices
             string targetDirectory = Path.Combine(baseAttachmentPath, jobFolder, equipFolder, partFolder);
             if (!Directory.Exists(targetDirectory)) Directory.CreateDirectory(targetDirectory);
 
-            // 2. Eski Dosyayı Sil
+            // 2. Eski Dosya Temizliği
             string oldLocalPath = "";
             if (!string.IsNullOrEmpty(existingAttachment.FilePath))
             {
@@ -196,38 +196,72 @@ namespace EquipmentTracker.Services.EquipmentPartAttachmentServices
                 oldLocalPath = Path.Combine(dbPath, relativePath);
             }
 
-            if (File.Exists(oldLocalPath)) { try { File.Delete(oldLocalPath); } catch { } }
+            if (existingAttachment.FileName != newFile.FileName && File.Exists(oldLocalPath))
+            {
+                try { File.Delete(oldLocalPath); } catch { }
+            }
+
             if (!string.IsNullOrEmpty(existingAttachment.ThumbnailPath) && File.Exists(existingAttachment.ThumbnailPath))
             {
                 try { File.Delete(existingAttachment.ThumbnailPath); } catch { }
             }
 
-            // 3. Yeni Dosyayı Kaydet
-            string uniqueFilePath = GetUniqueFilePath(targetDirectory, newFile.FileName);
-            string uniqueFileName = Path.GetFileName(uniqueFilePath);
+            // 3. Yeni Dosya (KİLİTLENME KONTROLÜ)
+            string finalFilePath;
+            string finalFileName;
+
+            if (existingAttachment.FileName == newFile.FileName)
+            {
+                finalFilePath = Path.Combine(targetDirectory, newFile.FileName);
+                finalFileName = newFile.FileName;
+
+                if (File.Exists(finalFilePath))
+                {
+                    try
+                    {
+                        File.Delete(finalFilePath);
+                    }
+                    catch (IOException)
+                    {
+                        throw new Exception($"'{finalFileName}' dosyası şu anda kullanımda. Lütfen kapatıp tekrar deneyin.");
+                    }
+                }
+            }
+            else
+            {
+                finalFilePath = GetUniqueFilePath(targetDirectory, newFile.FileName);
+                finalFileName = Path.GetFileName(finalFilePath);
+            }
 
             using (var stream = await newFile.OpenReadAsync())
-            using (var dest = File.Create(uniqueFilePath)) { await stream.CopyToAsync(dest); }
+            using (var dest = File.Create(finalFilePath)) { await stream.CopyToAsync(dest); }
 
-            // 4. Veritabanı Kaydını Güncelle
-            string ftpRelativePath = $"Attachments/{jobFolder}/{equipFolder}/{partFolder}/{uniqueFileName}";
+            // 4. Veritabanı
+            string ftpRelativePath = $"Attachments/{jobFolder}/{equipFolder}/{partFolder}/{finalFileName}";
 
-            existingAttachment.FileName = uniqueFileName;
+            existingAttachment.FileName = finalFileName;
             existingAttachment.FilePath = ftpRelativePath;
             existingAttachment.ThumbnailPath = null;
             existingAttachment.IsProcessing = true;
             existingAttachment.ProcessingProgress = 0;
 
-            _context.EquipmentPartAttachments.Update(existingAttachment);
-            await _context.SaveChangesAsync();
-            _context.Entry(existingAttachment).State = EntityState.Detached;
+            try
+            {
+                _context.EquipmentPartAttachments.Update(existingAttachment);
+                await _context.SaveChangesAsync();
+                _context.Entry(existingAttachment).State = EntityState.Detached;
 
-            // 5. Arka Plan İşlemini Başlat (DÜZELTİLDİ: Parametre Eklendi)
-            _ = Task.Run(() => ProcessPartAttachmentInBackground(existingAttachment, uniqueFilePath, ftpRelativePath, parentJob, parentEquipment, parentPart));
+                // 5. Arka Plan
+                _ = Task.Run(() => ProcessPartAttachmentInBackground(existingAttachment, finalFilePath, ftpRelativePath, parentJob, parentEquipment, parentPart));
+            }
+            catch (Exception)
+            {
+                existingAttachment.IsProcessing = false;
+                throw;
+            }
 
             return existingAttachment;
         }
-
 
         public async Task<EquipmentPartAttachment> AddAttachmentAsync(JobModel parentJob, Equipment parentEquipment, EquipmentPart parentPart, FileResult fileToCopy)
         {
