@@ -27,7 +27,7 @@ namespace EquipmentTracker
             var window = base.CreateWindow(activationState);
 
             const int WindowWidth = 650;
-            const int WindowHeight = 850;
+            const int WindowHeight = 700;
 
             window.MinimumWidth = WindowWidth;
             window.MinimumHeight = WindowHeight;

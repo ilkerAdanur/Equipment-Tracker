@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:vm="clr-namespace:EquipmentTracker.ViewModels"
@@ -15,10 +15,10 @@
         <converters:IsNullOrEmptyStringConverter x:Key="IsNullOrEmptyStringConverter" />
     </ContentPage.Resources>
 
-    <Grid>
+    <Grid x:Name="RootGrid">
         <ScrollView x:Name="MainScroll">
 
-            <VerticalStackLayout Spacing="10" Padding="15">
+            <VerticalStackLayout Spacing="10" Padding="15" IsClippedToBounds="False">
                 <Button Text="⬅ Anasayfaya Dön"
                         Command="{Binding GoToHomeCommand}"
                         HorizontalOptions="Start"
@@ -29,7 +29,7 @@
                         Margin="0,0,0,5"
                         Padding="0"/>
 
-                <Frame Padding="10" CornerRadius="10" BackgroundColor="White" BorderColor="{StaticResource Gray200}" WidthRequest="500">
+                <Frame Padding="10" CornerRadius="10" BackgroundColor="White" BorderColor="{StaticResource Gray200}" WidthRequest="500" >
                     <VerticalStackLayout Spacing="2">
 
                         <Entry Text="{Binding CurrentJob.JobName}" FontSize="Large" FontAttributes="Bold" TextColor="Black" Placeholder="İş Adı"/>
@@ -65,7 +65,7 @@
                     </VerticalStackLayout>
                 </Frame>
 
-                <VerticalStackLayout IsVisible="True" WidthRequest="500">
+                <VerticalStackLayout IsVisible="True" WidthRequest="500" IsClippedToBounds="False">
 
                     <Grid ColumnDefinitions="*, Auto, Auto" Padding="5,5,5,0" ColumnSpacing="10">
                         <Label Grid.Column="0" 
@@ -92,12 +92,12 @@
                                 HeightRequest="35"  />
                     </Grid>
 
-                    <CollectionView ItemsSource="{Binding CurrentJob.Equipments}">
+                    <CollectionView ItemsSource="{Binding CurrentJob.Equipments}" >
                         <CollectionView.ItemTemplate>
-                            <DataTemplate x:DataType="models:Equipment">
-                                <Frame Margin="0,0,0,5" BorderColor="{StaticResource Gray300}" Padding="0,10,0,0" CornerRadius="8" BackgroundColor="White" WidthRequest="500">
+                            <DataTemplate x:DataType="models:Equipment" >
+                                <Frame Margin="0,0,0,5" BorderColor="{StaticResource Gray300}" Padding="0,10,0,0" CornerRadius="8" BackgroundColor="White" WidthRequest="500" IsClippedToBounds="False">
 
-                                    <VerticalStackLayout Spacing="5">
+                                    <VerticalStackLayout Spacing="5" IsClippedToBounds="False">
 
                                         <Grid ColumnDefinitions="*, Auto" Margin="0,0,0,0">
 
@@ -153,18 +153,18 @@
                                                 </Button>
                                             </HorizontalStackLayout>
                                         </Grid>
-                                        
+
 
                                         <BoxView HeightRequest="1" Color="{StaticResource Gray200}"/>
 
-                                        <Label Text="Ekli Dosyalar:" FontSize="Caption" FontAttributes="Bold" TextColor="Black" Margin="7,10,0,0"/>
+                                        <Label Text="Ekli Dosyalar:" FontSize="Caption" FontAttributes="Bold" TextColor="Black" Margin="7,10,0,0" />
 
                                         <CollectionView ItemsSource="{Binding Attachments}" Margin="10,0,0,0">
                                             <CollectionView.ItemTemplate>
                                                 <DataTemplate x:DataType="models:EquipmentAttachment">
                                                     <Grid ColumnDefinitions="Auto, *, Auto, Auto" ColumnSpacing="5" Padding="0,2">
 
-                                                        <Grid Grid.Column="0" WidthRequest="125" HeightRequest="125" BackgroundColor="Transparent">
+                                                        <Grid Grid.Column="0" WidthRequest="60" HeightRequest="60" BackgroundColor="Transparent" IsClippedToBounds="False">
 
                                                             <Grid.GestureRecognizers>
                                                                 <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=OpenFileCommand}" 
@@ -177,7 +177,20 @@
                                                                 <Label Text="{Binding ProcessingProgress, StringFormat='{0:P0}'}" FontSize="10" TextColor="Gray" HorizontalOptions="Center"/>
                                                             </VerticalStackLayout>
 
-                                                            <Image Source="{Binding ThumbnailPath}" Aspect="AspectFit" BackgroundColor="{StaticResource Gray100}" ZIndex="1">
+                                                            <Image Source="{Binding ThumbnailPath}" 
+                                                                   Aspect="AspectFit" 
+                                                                   BackgroundColor="{StaticResource Gray100}" 
+                                                                   ZIndex="1"
+                                                                   WidthRequest="60" HeightRequest="60"
+                                                                   HorizontalOptions="Center" VerticalOptions="Center">
+
+                                                            <Image.GestureRecognizers>
+                                                                <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=OpenFileCommand}" 
+                                                                  CommandParameter="{Binding FilePath}"/>
+                                                                <PointerGestureRecognizer PointerEntered="ThumbnailPointerEntered"
+                                                                                          PointerExited="ThumbnailPointerExited"/>
+                                                            </Image.GestureRecognizers>
+
                                                                 <Image.Triggers>
                                                                     <DataTrigger TargetType="Image" Binding="{Binding IsProcessing}" Value="True">
                                                                         <Setter Property="IsVisible" Value="False" />
@@ -186,6 +199,7 @@
                                                                         <Setter Property="IsVisible" Value="False" />
                                                                     </DataTrigger>
                                                                 </Image.Triggers>
+
                                                             </Image>
 
                                                             <Label Text="Resim Yok" 
@@ -206,8 +220,8 @@
 
                                                         </Grid>
 
-                                                        
-                                                        
+
+
                                                         <Label Grid.Column="1" Text="{Binding FileName}" TextColor="Blue" TextDecorations="Underline" VerticalOptions="Center" FontSize="Caption">
                                                             <Label.GestureRecognizers>
                                                                 <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=CopyToClipboardCommand}" CommandParameter="{Binding FilePath}"/>
@@ -235,7 +249,7 @@
                                         <CollectionView ItemsSource="{Binding Parts}" Margin="10,5,0,0">
                                             <CollectionView.ItemTemplate>
                                                 <DataTemplate x:DataType="models:EquipmentPart">
-                                                    <VerticalStackLayout Spacing="5" Margin="0,0,0,5">
+                                                    <VerticalStackLayout Spacing="5" Margin="0,0,0,5" IsClippedToBounds="False">
 
                                                         <Grid ColumnDefinitions="Auto, *, Auto, Auto" ColumnSpacing="5" Padding="0,2">
                                                             <Label Grid.Column="0" Text="{Binding PartId, StringFormat='{0}.'}" TextColor="{StaticResource Gray900}" VerticalOptions="Center" FontSize="Caption">
@@ -243,14 +257,18 @@
                                                                     <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=CopyToClipboardCommand}" CommandParameter="{Binding PartId}"/>
                                                                 </Label.GestureRecognizers>
                                                             </Label>
+
                                                             <Label Grid.Column="1" Text="{Binding Name}" Margin="5,0,0,0" TextColor="Black" VerticalOptions="Center" FontAttributes="Bold" FontSize="Caption">
                                                                 <Label.GestureRecognizers>
-                                                                    <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=CopyToClipboardCommand}" CommandParameter="{Binding Name}"/>
+                                                                    <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=CopyToClipboardCommand}" 
+                                                                    CommandParameter="{Binding .}"/>
                                                                 </Label.GestureRecognizers>
                                                             </Label>
+
                                                             <Label Grid.Column="2" Text="{Binding PartCode}" TextColor="{StaticResource Gray500}" VerticalOptions="Center" HorizontalOptions="Start" FontSize="Caption">
                                                                 <Label.GestureRecognizers>
-                                                                    <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=CopyToClipboardCommand}" CommandParameter="{Binding PartCode}"/>
+                                                                    <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=CopyToClipboardCommand}" 
+                                                                    CommandParameter="{Binding .}"/>
                                                                 </Label.GestureRecognizers>
                                                             </Label>
 
@@ -285,18 +303,31 @@
                                                         <CollectionView ItemsSource="{Binding Attachments}" Margin="20,0,0,0">
                                                             <CollectionView.ItemTemplate>
                                                                 <DataTemplate x:DataType="models:EquipmentPartAttachment">
-                                                                    <Grid ColumnDefinitions="Auto, *, Auto" ColumnSpacing="5" Padding="0,2">
+                                                                    <Grid ColumnDefinitions="Auto, *, Auto" ColumnSpacing="5" Padding="0,2" IsClippedToBounds="False">
 
-                                                                        <Grid Grid.Column="0" WidthRequest="100" HeightRequest="100">
+
+
+                                                                        <Grid Grid.Column="0" WidthRequest="50" HeightRequest="50" IsClippedToBounds="False">
                                                                             <VerticalStackLayout VerticalOptions="Center" HorizontalOptions="Center" IsVisible="{Binding IsProcessing}" Spacing="2">
                                                                                 <Label Text="İşleniyor..." FontSize="8" TextColor="Gray" HorizontalOptions="Center"/>
                                                                                 <ProgressBar Progress="{Binding ProcessingProgress}" ProgressColor="{StaticResource Primary}" WidthRequest="80" HeightRequest="8"/>
                                                                             </VerticalStackLayout>
 
-                                                                            <Image Source="{Binding ThumbnailPath}" WidthRequest="100" HeightRequest="100" Aspect="AspectFit" BackgroundColor="{StaticResource Gray100}" ZIndex="1">
+                                                                            <Image Source="{Binding ThumbnailPath}" 
+                                                                            WidthRequest="50" HeightRequest="50" 
+                                                                            Aspect="AspectFit" 
+                                                                            BackgroundColor="{StaticResource Gray100}" 
+                                                                            ZIndex="1"
+                                                                            HorizontalOptions="Center" VerticalOptions="Center">
+
                                                                                 <Image.GestureRecognizers>
-                                                                                    <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=OpenFileCommand}" CommandParameter="{Binding FilePath}"/>
-                                                                                </Image.GestureRecognizers>
+                                                                                    <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=OpenFileCommand}" 
+                                                                                    CommandParameter="{Binding FilePath}"/>
+
+                                                                                    <PointerGestureRecognizer PointerEntered="ThumbnailPointerEntered"
+                                                                                                              PointerExited="ThumbnailPointerExited"/>
+                                                                                     </Image.GestureRecognizers>
+
                                                                                 <Image.Triggers>
                                                                                     <DataTrigger TargetType="Image" Binding="{Binding IsProcessing}" Value="True">
                                                                                         <Setter Property="IsVisible" Value="False" />
@@ -343,9 +374,35 @@
                             </DataTemplate>
                         </CollectionView.ItemTemplate>
                     </CollectionView>
+                
+                
+                
                 </VerticalStackLayout>
             </VerticalStackLayout>
+        
+        
         </ScrollView>
+
+        <Border x:Name="AttachmentPreview"
+                WidthRequest="320"
+                HeightRequest="320"
+                StrokeThickness="1"
+                Stroke="{StaticResource Gray400}"
+                BackgroundColor="#F9FFFFFF"
+                Padding="8"
+                IsVisible="False"
+                InputTransparent="True"
+                ZIndex="999"
+                HorizontalOptions="Start"
+                VerticalOptions="Start">
+            <Border.StrokeShape>
+                <RoundRectangle CornerRadius="12"/>
+            </Border.StrokeShape>
+            <Image x:Name="AttachmentPreviewImage"
+                   Aspect="AspectFit"
+                   WidthRequest="304"
+                   HeightRequest="304"/>
+        </Border>
 
         <Grid IsVisible="{Binding IsBusy}" BackgroundColor="#80000000">
             <VerticalStackLayout HorizontalOptions="Center" VerticalOptions="Center" Spacing="10">

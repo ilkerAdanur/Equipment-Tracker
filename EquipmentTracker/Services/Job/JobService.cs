@@ -85,7 +85,7 @@ namespace EquipmentTracker.Services.Job
             if (string.IsNullOrEmpty(name)) return "Unknown";
             foreach (char c in Path.GetInvalidFileNameChars())
             {
-                name = name.Replace(c, '_');
+                name = name.Replace(c, '.');
             }
             return name.Trim();
         }

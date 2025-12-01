@@ -1,4 +1,6 @@
-﻿namespace EquipmentTracker
+﻿using EquipmentTracker.Views;
+
+namespace EquipmentTracker
 {
     public partial class AppShell : Shell
     {
@@ -16,6 +18,10 @@
             {
                 AdminTab.IsVisible = false; // Değilse gizle
             }
+            Routing.RegisterRoute(nameof(JobDetailsPage), typeof(JobDetailsPage));
+            Routing.RegisterRoute(nameof(AddNewJobPage), typeof(AddNewJobPage));
+            Routing.RegisterRoute(nameof(SettingsPage), typeof(SettingsPage)); // <-- YENİ EKLEYİN
+
         }
     }
 }

@@ -6,6 +6,8 @@
 *.sln.docstates
 *.userprefs
 
+.cursor
+
 # Build outputs
 [Dd]ebug/
 [Rr]elease/

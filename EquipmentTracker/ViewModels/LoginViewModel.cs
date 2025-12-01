@@ -118,5 +118,46 @@ namespace EquipmentTracker.ViewModels
             await Application.Current.MainPage.Navigation.PushAsync(new SettingsPage(
                 new SettingsViewModel(CommunityToolkit.Maui.Storage.FolderPicker.Default, services)));
         }
+
+        public async Task<bool> CheckInternetAndDbConnectionLoop()
+        {
+            while (Connectivity.Current.NetworkAccess != NetworkAccess.Internet)
+            {
+                // İnternet yoksa döngüye gir
+                bool retry = await Application.Current.MainPage.DisplayAlert(
+                    "Bağlantı Hatası",
+                    "İnternet bağlantısı bulunamadı.\nLütfen internetinizi açın ve 'Tekrar Dene' butonuna basın.",
+                    "Tekrar Dene",
+                    "Uygulamayı Kapat");
+
+                if (!retry)
+                {
+                    // Kullanıcı kapat dedi
+                    Application.Current.Quit();
+                    return false;
+                }
+
+                // Kullanıcı "Tekrar Dene" dediğinde döngü başa döner ve tekrar kontrol eder.
+            }
+
+            // İnternet var, şimdi DB başlatmayı dene
+            if (!MauiProgram.IsDatabaseInitialized)
+            {
+                try
+                {
+                    await _jobService.InitializeDatabaseAsync();
+                    MauiProgram.IsDatabaseInitialized = true;
+                }
+                catch (Exception ex)
+                {
+                    // DB Hatası varsa yine uyar ve gerekirse döngüye sokabilirsin
+                    await Application.Current.MainPage.DisplayAlert("Sunucu Hatası", $"Sunucuya erişilemedi: {ex.Message}\nAyarları kontrol edin.", "Tamam");
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
     }
 }

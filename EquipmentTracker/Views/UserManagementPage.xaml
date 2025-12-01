@@ -16,7 +16,7 @@
 
                 <Grid ColumnDefinitions="*, *, *">
                     <Entry Grid.Column="0" Placeholder="Kullanıcı Adı" Text="{Binding NewUsername}" BackgroundColor="White" TextColor="Black" PlaceholderColor="Gray"/>
-                    <Entry Grid.Column="1" Placeholder="Ad Soyad" Text="{Binding NewFullName}" Margin="5,0" BackgroundColor="White" TextColor="Black" PlaceholderColor="Gray"/>
+                    <Entry Grid.Column="1" Placeholder="Görevi" Text="{Binding NewFullName}" Margin="5,0" BackgroundColor="White" TextColor="Black" PlaceholderColor="Gray"/>
                     <Entry Grid.Column="2" Placeholder="Şifre" Text="{Binding NewPassword}" IsPassword="True" BackgroundColor="White" TextColor="Black" PlaceholderColor="Gray"/>
                 </Grid>
 

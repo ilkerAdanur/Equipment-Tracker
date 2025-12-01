@@ -24,6 +24,7 @@ namespace EquipmentTracker.ViewModels
     [QueryProperty(nameof(JobId), "JobId")]
     public partial class JobDetailsViewModel : BaseViewModel
     {
+        private static readonly SemaphoreSlim _excelLock = new SemaphoreSlim(1, 1);
         private readonly IJobService _jobService;
         private readonly IEquipmentService _equipmentService;
         private readonly IEquipmentPartService _partService; // Sizin isimlendirmeniz
@@ -91,43 +92,51 @@ namespace EquipmentTracker.ViewModels
         {
             LoadJobDetailsCommand.Execute(value);
         }
+
         [RelayCommand]
-        async Task CopyToClipboard(string text)
+        async Task CopyToClipboard(object parameter) // Parametreyi 'string' yerine 'object' yaptık
         {
-            if (string.IsNullOrWhiteSpace(text)) return;
+            if (parameter == null) return;
 
-            string textToCopy = text;
+            string textToCopy = "";
 
-            // Eğer kopyalanan metin bir dosya yolu ise ve "Attachments" içeriyorsa formatla
-            // Örn: Attachments/52_Deneme52/52_1_d1/pernolar.dwg -> 52_1_d1_pernolar.dwg
-            if (text.Contains("/") || text.Contains("\\"))
+            // 1. Durum: Eğer tıklanan bir Parça (EquipmentPart) ise (Y1 veya 5.1.1'e tıklandıysa)
+            if (parameter is EquipmentPart part)
             {
-                // Ters slashları düze çevir
-                string normalized = text.Replace("\\", "/");
+                // İstenilen format: 5.1.1.Y1
+                textToCopy = $"{part.PartCode}.{part.Name}";
+            }
+            // 2. Durum: Eğer tıklanan düz bir yazı ise (İş No, Dosya Yolu vb.)
+            else if (parameter is string text)
+            {
+                textToCopy = text;
 
-                if (normalized.StartsWith("Attachments/"))
+                // Dosya yolları için olan mevcut temizleme mantığınız:
+                if (textToCopy.Contains("/") || textToCopy.Contains("\\"))
                 {
-                    var parts = normalized.Split('/');
-
-                    // Ekipman Dosyası Formatı: Attachments/Job/Equip/File
-                    if (parts.Length >= 4)
+                    string normalized = textToCopy.Replace("\\", "/");
+                    if (normalized.StartsWith("Attachments/"))
                     {
-                        // Son klasör (Ekipman veya Parça klasörü)
-                        string lastFolder = parts[parts.Length - 2];
-                        // Dosya adı
-                        string fileName = parts[parts.Length - 1];
-
-                        textToCopy = $"{lastFolder}_{fileName}";
+                        var parts = normalized.Split('/');
+                        if (parts.Length >= 4)
+                        {
+                            string lastFolder = parts[parts.Length - 2];
+                            string fileName = parts[parts.Length - 1];
+                            textToCopy = $"{lastFolder}_{fileName}";
+                        }
                     }
                 }
             }
 
-            await Clipboard.Default.SetTextAsync(textToCopy);
+            // Eğer kopyalanacak metin oluştuysa panoya kopyala
+            if (!string.IsNullOrWhiteSpace(textToCopy))
+            {
+                await Clipboard.Default.SetTextAsync(textToCopy);
 
-            if (Application.Current?.MainPage != null)
-                await Application.Current.MainPage.DisplayAlert("Kopyalandı", $"'{textToCopy}' panoya kopyalandı.", "Tamam");
+                if (Application.Current?.MainPage != null)
+                    await Application.Current.MainPage.DisplayAlert("Kopyalandı", $"'{textToCopy}' panoya kopyalandı.", "Tamam");
+            }
         }
-
 
         [RelayCommand]
         public async Task LoadJobDetailsAsync(int jobId)
@@ -834,210 +843,189 @@ namespace EquipmentTracker.ViewModels
             }
         }
 
+
         [RelayCommand]
         async Task CreateExcelReport()
         {
+            // Önce dosyayı oluştur/güncelle
+            await SaveExcelToDiskAsync();
+
             if (CurrentJob == null) return;
-            if (IsBusy) return;
-            IsBusy = true;
+            string safeJobName = SanitizeFolderName(CurrentJob.JobName);
+            string jobFolder = $"{CurrentJob.JobNumber}_{safeJobName}";
+            string fileName = $"{CurrentJob.JobNumber}_{safeJobName}.xlsx";
 
-            try
+            string basePath = Preferences.Get("attachment_path", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TrackerDatabase"));
+            string filePath = Path.Combine(basePath, "Attachments", jobFolder, fileName);
+
+            if (File.Exists(filePath))
             {
-                // 1. Klasör Yolunu Bul
-                string baseAttachmentPath = Preferences.Get("attachment_path", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TrackerDatabase"));
-                baseAttachmentPath = Path.Combine(baseAttachmentPath, "Attachments");
-
-                // İsim temizleme (JobService'deki metodun aynısını burada kullanıyoruz veya helper yapabiliriz)
-                string safeJobName = Regex.Replace(CurrentJob.JobName, @"[\\/:*?""<>| ]", "_");
-                safeJobName = Regex.Replace(safeJobName, @"_+", "_").Trim('_');
-
-                string jobFolder = $"{CurrentJob.JobNumber}_{safeJobName}";
-                string directoryPath = Path.Combine(baseAttachmentPath, jobFolder);
-
-                // Klasör yoksa oluştur
-                if (!Directory.Exists(directoryPath))
-                {
-                    Directory.CreateDirectory(directoryPath);
-                }
-
-                // 2. Dosya Adını Oluştur (Örn: 3_Aşkale.xlsx)
-                string fileName = $"{CurrentJob.JobNumber}_{safeJobName}.xlsx";
-                string filePath = Path.Combine(directoryPath, fileName);
-
-                // 3. Veriyi Hazırla
-                // Sadece Excel'e basılacak basit bir liste oluşturuyoruz
-                var excelData = CurrentJob.Equipments.Select(e => new
-                {
-                    EkipmanNo = e.EquipmentCode, // Örn: 3.1
-                    EkipmanAdi = e.Name,         // Örn: Dozaj Pompası
-                    ParcaSayisi = e.Parts.Count,
-                    DosyaSayisi = e.Attachments.Count
-                });
-
-                // 4. Excel'i Kaydet (MiniExcel ile çok basit)
-                await MiniExcel.SaveAsAsync(filePath, excelData);
-
-                // 5. Kullanıcıya Bilgi Ver
-                bool openFile = await Shell.Current.DisplayAlert("Başarılı",
-                    $"Excel dosyası oluşturuldu:\n{fileName}\n\nKlasörde açmak ister misiniz?",
+                bool open = await Shell.Current.DisplayAlert("Rapor Hazır",
+                    "Excel dosyası oluşturuldu.\nAçmak ister misiniz?",
                     "Evet", "Hayır");
 
-                if (openFile)
+                if (open)
                 {
-                    // Dosyayı açmayı dene
-                    await Launcher.Default.OpenAsync(new OpenFileRequest
-                    {
-                        File = new ReadOnlyFile(filePath)
-                    });
+                    await Launcher.Default.OpenAsync(new OpenFileRequest { File = new ReadOnlyFile(filePath) });
                 }
-            }
-            catch (Exception ex)
-            {
-                await Shell.Current.DisplayAlert("Hata", $"Excel oluşturulurken hata: {ex.Message}", "Tamam");
-            }
-            finally
-            {
-                IsBusy = false;
             }
         }
 
-
+        // 2. METOT: Ana Kayıt Mantığı (DÜZELTİLDİ: Ekranda görünen veriyi kullanır)
+        // 2. METOT: Ana Kayıt Mantığı (Dosya Açıksa Kopyasını Oluşturur)
         private async Task SaveExcelToDiskAsync()
         {
             if (CurrentJob == null) return;
 
+            // Dosya çakışmalarını önlemek için bekle
+            await _excelLock.WaitAsync();
+
             try
             {
-                // 1. Veritabanından En Güncel ve Dolu Veriyi Çek (Includes ile)
-                // UI'daki CurrentJob yerine, veritabanından taze kopya alıyoruz.
-                var freshJobData = await _jobService.GetJobByIdAsync(CurrentJob.Id);
+                // Veriyi doğrudan ekrandan al (Hız ve güncellik için)
+                var jobData = CurrentJob;
 
-                if (freshJobData == null) return;
-
-                // 2. Klasör Yollarını Hazırla
+                // --- KLASÖR YOLLARI ---
                 string baseAttachmentPath = Preferences.Get("attachment_path", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TrackerDatabase"));
                 baseAttachmentPath = Path.Combine(baseAttachmentPath, "Attachments");
 
-                string safeJobName = Regex.Replace(freshJobData.JobName, @"[\\/:*?""<>| ]", "_");
-                safeJobName = Regex.Replace(safeJobName, @"_+", "_").Trim('_');
-
-                string jobFolder = $"{freshJobData.JobNumber}_{safeJobName}";
+                string safeJobName = SanitizeFolderName(jobData.JobName);
+                string jobFolder = $"{jobData.JobNumber}_{safeJobName}";
                 string directoryPath = Path.Combine(baseAttachmentPath, jobFolder);
 
-                if (!Directory.Exists(directoryPath))
+                if (!Directory.Exists(directoryPath)) Directory.CreateDirectory(directoryPath);
+
+                string baseFileName = $"{jobData.JobNumber}_{safeJobName}";
+                string targetFilePath = Path.Combine(directoryPath, $"{baseFileName}.xlsx");
+
+                // --- LİSTE OLUŞTURMA (TEK SÜTUN MANTIĞI) ---
+                var excelData = new List<dynamic>();
+
+                if (jobData.Equipments != null)
                 {
-                    Directory.CreateDirectory(directoryPath);
+                    foreach (var eq in jobData.Equipments)
+                    {
+                        // 1. Önce Ekipman Satırını Ekle (Örn: 4.1.D1)
+                        // Kod ve Adı birleştiriyoruz.
+                        string ekipmanTanim = $"{eq.EquipmentCode}.{eq.Name}";
+
+                        excelData.Add(new
+                        {
+                            Ad = ekipmanTanim, // Tek sütun: "4.1.D1"
+                            Dosya = eq.Attachments?.Count ?? 0,
+                            Tarih = DateTime.Now.ToString("dd.MM.yyyy HH:mm")
+                        });
+
+                        // 2. Varsa Parçaları Altına Ekle (Örn: 4.1.1.Y1)
+                        if (eq.Parts != null && eq.Parts.Count > 0)
+                        {
+                            foreach (var part in eq.Parts)
+                            {
+                                // Parça verisi (Girintili gözükmesi için başına boşluk veya simge koyabiliriz)
+                                // İsteğiniz: 4.1.1.Y1
+                                string parcaTanim = $"   ↳ {part.PartCode}.{part.Name}";
+
+                                excelData.Add(new
+                                {
+                                    Ad = parcaTanim, // Tek sütun: "   ↳ 4.1.1.Y1"
+                                    Dosya = part.Attachments?.Count ?? 0,
+                                    Tarih = "" // Parça için tarih tekrarına gerek yoksa boş bırakılabilir veya doldurulabilir
+                                });
+                            }
+                        }
+                    }
                 }
 
-                string fileName = $"{freshJobData.JobNumber}_{safeJobName}.xlsx";
-                string filePath = Path.Combine(directoryPath, fileName);
+                // --- KAYDETME İŞLEMİ (LOCK KONTROLÜ İLE) ---
+                string finalSavedPath = targetFilePath;
+                bool savedAsCopy = false;
 
-                // 3. Veriyi Hazırla (freshJobData kullanarak)
-                var excelData = freshJobData.Equipments.Select(e => new
+                try
                 {
-                    EkipmanNo = e.EquipmentCode,
-                    EkipmanAdi = e.Name,
-                    // Null kontrolü yaparak sayıları alıyoruz
-                    ParcaSayisi = e.Parts != null ? e.Parts.Count : 0,
-                    DosyaSayisi = (e.Attachments?.Count ?? 0) + (e.Parts?.Sum(p => p.Attachments?.Count ?? 0) ?? 0), // Hem ekipman hem parça dosyalarını topla
-                    EklemeTarihi = DateTime.Now.ToString("dd.MM.yyyy HH:mm")
-                });
+                    // Asıl dosyaya yazmayı dene
+                    await MiniExcel.SaveAsAsync(targetFilePath, excelData, overwriteFile: true);
+                }
+                catch (IOException)
+                {
+                    // DOSYA AÇIKSA: Kopya oluştur (İşlem durmasın)
+                    savedAsCopy = true;
+                    string timestamp = DateTime.Now.ToString("HHmmss");
+                    string copyFileName = $"{baseFileName}_Kopya_{timestamp}.xlsx";
+                    finalSavedPath = Path.Combine(directoryPath, copyFileName);
 
-                // 4. Kaydet
-                await MiniExcel.SaveAsAsync(filePath, excelData, overwriteFile: true);
-                var jobForFtp = CurrentJob; // Thread güvenliği için kopyala
+                    await MiniExcel.SaveAsAsync(finalSavedPath, excelData, overwriteFile: true);
+                }
+
+                // --- FTP SENKRONİZASYONU ---
+                var jobForFtp = CurrentJob;
                 _ = Task.Run(async () =>
                 {
                     try
                     {
-                        // Klasör yolunu tekrar hesapla (ViewModel içinde sanitize metodu yoksa kopyala veya helper kullan)
-                        // Burada basitçe Regex kullanabilirsin:
-                        string safeJobName = Regex.Replace(jobForFtp.JobName, @"[\\/:*?""<>| ]", "_");
-                        safeJobName = Regex.Replace(safeJobName, @"_+", "_").Trim('_');
-                        string jobFolder = $"{jobForFtp.JobNumber}_{safeJobName}";
+                        string sJobName = SanitizeFolderName(jobForFtp.JobName);
+                        string jFolder = $"{jobForFtp.JobNumber}_{sJobName}";
+                        string ftpFolder = $"Attachments/{jFolder}";
 
-                        // Hedef FTP klasörü: Attachments/IsKlasoru/
-                        string ftpFolderPath = $"Attachments/{jobFolder}";
-
-                        // Klasör olduğundan emin ol
                         await _ftpHelper.CreateDirectoryAsync("Attachments");
-                        await _ftpHelper.CreateDirectoryAsync(ftpFolderPath);
-
-                        // Yükle
-                        await _ftpHelper.UploadFileAsync(filePath, ftpFolderPath);
+                        await _ftpHelper.CreateDirectoryAsync(ftpFolder);
+                        // Hangi dosya oluşturulduysa onu yükle (Kopya veya Orijinal)
+                        await _ftpHelper.UploadFileAsync(finalSavedPath, ftpFolder);
                     }
                     catch (Exception ex)
                     {
                         System.Diagnostics.Debug.WriteLine($"Excel FTP Hatası: {ex.Message}");
                     }
                 });
-            }
-            catch (IOException)
-            {
-                bool retry = await Shell.Current.DisplayAlert("Uyarı",
-                    "Excel dosyası şu anda açık olduğu için güncellenemiyor.\n\nLütfen Excel'i kapatıp 'Tekrar Dene' butonuna basın.",
-                    "Tekrar Dene", "İptal Et");
 
-                if (retry) await SaveExcelToDiskAsync();
+                // Kullanıcıya Bilgi (Sadece kopya oluşturmak zorunda kaldıysa)
+                if (savedAsCopy)
+                {
+                    await Shell.Current.DisplayAlert("Bilgi",
+                        $"Asıl Excel dosyası açık olduğu için veriler '{Path.GetFileName(finalSavedPath)}' adıyla yeni bir dosyaya kaydedildi.",
+                        "Tamam");
+                }
             }
             catch (Exception ex)
             {
                 await Shell.Current.DisplayAlert("Hata", $"Excel hatası: {ex.Message}", "Tamam");
             }
+            finally
+            {
+                // Kilidi kaldır
+                _excelLock.Release();
+            }
         }
-
+        // 3. METOT: Dosya Açma
         [RelayCommand]
         async Task OpenExcelFile()
         {
             if (CurrentJob == null) return;
-
             try
             {
                 string basePath = Preferences.Get("attachment_path", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TrackerDatabase"));
-                basePath = Path.Combine(basePath, "Attachments");
-
                 string safeJobName = SanitizeFolderName(CurrentJob.JobName);
                 string jobFolder = $"{CurrentJob.JobNumber}_{safeJobName}";
                 string fileName = $"{CurrentJob.JobNumber}_{safeJobName}.xlsx";
-                string filePath = Path.Combine(basePath, jobFolder, fileName);
+                string localFilePath = Path.Combine(basePath, "Attachments", jobFolder, fileName);
 
-                // 1. Yerel Kontrol
-                if (!File.Exists(filePath))
+                // Dosya yoksa oluştur
+                if (!File.Exists(localFilePath))
                 {
-                    // 2. Yoksa İndirmeyi Dene (Sormadan dene, Excel önemlidir)
-                    if (IsBusy) return;
-                    IsBusy = true;
-
-                    try
-                    {
-                        string remotePath = $"Attachments/{jobFolder}/{fileName}";
-                        await _ftpHelper.DownloadFileAsync(remotePath, filePath);
-                    }
-                    finally { IsBusy = false; }
+                    await SaveExcelToDiskAsync();
                 }
 
-                // 3. Hala yoksa (ve Adminse) oluştur
-                if (!File.Exists(filePath))
+                // Aç
+                if (File.Exists(localFilePath))
                 {
-                    //if (IsAdminUser) 
-                    //{
-                        await SaveExcelToDiskAsync();
-                    //}
-                    //else
-                    //{
-                    //    await Shell.Current.DisplayAlert("Bilgi", "Excel dosyası henüz oluşturulmamış.", "Tamam");
-                    //    return;
-                    //}
+                    await Launcher.Default.OpenAsync(new OpenFileRequest { File = new ReadOnlyFile(localFilePath) });
                 }
-
-                // 4. Aç
-                await Launcher.Default.OpenAsync(new OpenFileRequest { File = new ReadOnlyFile(filePath) });
             }
             catch (Exception ex)
             {
-                await Shell.Current.DisplayAlert("Hata", $"Excel hatası: {ex.Message}", "Tamam");
+                await Shell.Current.DisplayAlert("Hata", ex.Message, "Tamam");
             }
         }
+
 
 
         [RelayCommand]
@@ -1119,61 +1107,59 @@ namespace EquipmentTracker.ViewModels
         }
 
 
+
+
+        // Dosya Açma Komutu (Onay sorusu eklendi)
         [RelayCommand]
-        async Task OpenFile(string dbFilePath) // DB'den gelen Relative Path (Attachments/...)
+        async Task OpenFile(string dbFilePath)
         {
             if (string.IsNullOrWhiteSpace(dbFilePath)) return;
+
+            // --- YENİ EKLENEN ONAY KUTUSU ---
+            bool answer = await Shell.Current.DisplayAlert("Dosya Aç",
+                "Bu dosyayı sistem varsayılan uygulamasıyla açmak istiyor musunuz?",
+                "Evet", "Hayır");
+
+            if (!answer) return; // Hayır derse çık
+            // ---------------------------------
 
             try
             {
                 string fileName = Path.GetFileName(dbFilePath);
-                string localFullPath = "";
+                string localFullPath;
 
                 if (IsAdminUser)
                 {
-                    // ADMIN: Gerçek yerel yolu oluştur
-                    // dbFilePath zaten "Attachments\Klasör\Dosya" formatında (veya /)
                     string basePath = Preferences.Get("attachment_path", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TrackerDatabase"));
-
-                    // Path.Combine platforma göre / veya \ düzeltir
                     localFullPath = Path.Combine(basePath, dbFilePath.Replace("/", Path.DirectorySeparatorChar.ToString()));
                 }
                 else
                 {
-                    // USER: Cache klasörü
                     localFullPath = Path.Combine(FileSystem.CacheDirectory, fileName);
                 }
 
-                // 1. Dosya var mı?
                 if (File.Exists(localFullPath))
                 {
                     await Launcher.OpenAsync(new OpenFileRequest { File = new ReadOnlyFile(localFullPath) });
                     return;
                 }
 
-                // 2. Yoksa İndir
-                bool answer = await Shell.Current.DisplayAlert("İndir", "Dosya cihazda yok. İndirilsin mi?", "Evet", "Hayır");
-                if (!answer) return;
+                // Dosya yoksa indirme onayı (Bu zaten vardı, kalsın)
+                bool downloadConfirm = await Shell.Current.DisplayAlert("İndir", "Dosya yerelde bulunamadı. İndirilsin mi?", "Evet", "Hayır");
+                if (!downloadConfirm) return;
 
                 if (IsBusy) return;
                 IsBusy = true;
 
                 try
                 {
-                    // dbFilePath zaten FTP yolu formatında (Attachments/...)
-                    // Sadece ters slashları düze çevirelim garanti olsun
                     string ftpPath = dbFilePath.Replace("\\", "/");
-
                     await _ftpHelper.DownloadFileAsync(ftpPath, localFullPath);
 
                     if (File.Exists(localFullPath))
-                    {
                         await Launcher.OpenAsync(new OpenFileRequest { File = new ReadOnlyFile(localFullPath) });
-                    }
                     else
-                    {
                         await Shell.Current.DisplayAlert("Hata", "İndirme başarısız.", "Tamam");
-                    }
                 }
                 finally { IsBusy = false; }
             }
@@ -1182,5 +1168,7 @@ namespace EquipmentTracker.ViewModels
                 await Shell.Current.DisplayAlert("Hata", ex.Message, "Tamam");
             }
         }
+
+
     }
 }
