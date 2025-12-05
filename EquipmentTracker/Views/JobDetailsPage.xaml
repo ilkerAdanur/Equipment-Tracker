@@ -112,7 +112,7 @@
                                                 </Grid.Triggers>
 
                                                 <HorizontalStackLayout VerticalOptions="Center" Spacing="5">
-                                                    <Label Text="{Binding Name}" FontSize="Small" FontAttributes="Bold" TextColor="Black">
+                                                    <Label Text="{Binding Name, Mode=TwoWay}" FontSize="Small" FontAttributes="Bold" TextColor="Black">
                                                         <Label.GestureRecognizers>
                                                             <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=CopyToClipboardCommand}" CommandParameter="{Binding Name}"/>
                                                         </Label.GestureRecognizers>
@@ -127,17 +127,38 @@
                                             </Grid>
 
                                             <HorizontalStackLayout Grid.Column="1" Spacing="5" Margin="5,0,0,0" VerticalOptions="Center">
+
+                                                <Button Text="Güncelle" 
+                                                        FontSize="10" 
+                                                        HeightRequest="30" 
+                                                        Padding="5,0"
+                                                        BackgroundColor="#2196F3" 
+                                                        TextColor="White"
+                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=UpdateEquipmentCommand}" 
+                                                        CommandParameter="{Binding .}"
+                                                        IsVisible="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=IsAdminUser}"/>
+
+                                                <Button Text="Sil" 
+                                                        FontSize="10" 
+                                                        HeightRequest="30" 
+                                                        Padding="5,0"
+                                                        BackgroundColor="#D32F2F" 
+                                                        TextColor="White"
+                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=DeleteEquipmentCommand}" 
+                                                        CommandParameter="{Binding .}"
+                                                        IsVisible="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=IsAdminUser}"/>
+
                                                 <Button Text="Dosya (+)" FontSize="10" HeightRequest="30" Padding="5,0"
-                Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=AddNewAttachmentCommand}" 
-                CommandParameter="{Binding .}"/>
+                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=AddNewAttachmentCommand}" 
+                                                        CommandParameter="{Binding .}"/>
 
                                                 <Button Text="+" FontSize="Medium" WidthRequest="40" HeightRequest="30" Padding="0"
-                Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=AddNewPartCommand}" 
-                CommandParameter="{Binding .}"/>
+                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=AddNewPartCommand}" 
+                                                        CommandParameter="{Binding .}"/>
 
                                                 <Button WidthRequest="70" HeightRequest="30" Padding="0" FontSize="10" FontAttributes="Bold"
-                Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=ToggleEquipmentStatusCommand}" 
-                CommandParameter="{Binding .}">
+                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=ToggleEquipmentStatusCommand}" 
+                                                        CommandParameter="{Binding .}">
                                                     <Button.Triggers>
                                                         <DataTrigger TargetType="Button" Binding="{Binding IsCancelled}" Value="True">
                                                             <Setter Property="Text" Value="AKTİF ET" />
@@ -146,8 +167,8 @@
                                                         </DataTrigger>
                                                         <DataTrigger TargetType="Button" Binding="{Binding IsCancelled}" Value="False">
                                                             <Setter Property="Text" Value="İPTAL" />
-                                                            <Setter Property="BackgroundColor" Value="#D32F2F" />
-                                                            <Setter Property="TextColor" Value="White" />
+                                                            <Setter Property="BackgroundColor" Value="Orange" />
+                                                            <Setter Property="TextColor" Value="Black" />
                                                         </DataTrigger>
                                                     </Button.Triggers>
                                                 </Button>
@@ -251,7 +272,8 @@
                                                 <DataTemplate x:DataType="models:EquipmentPart">
                                                     <VerticalStackLayout Spacing="5" Margin="0,0,0,5" IsClippedToBounds="False">
 
-                                                        <Grid ColumnDefinitions="Auto, *, Auto, Auto" ColumnSpacing="5" Padding="0,2">
+                                                        <Grid ColumnDefinitions="Auto, *, Auto, Auto, Auto, Auto" ColumnSpacing="5" Padding="0,2">
+
                                                             <Label Grid.Column="0" Text="{Binding PartId, StringFormat='{0}.'}" TextColor="{StaticResource Gray900}" VerticalOptions="Center" FontSize="Caption">
                                                                 <Label.GestureRecognizers>
                                                                     <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=CopyToClipboardCommand}" CommandParameter="{Binding PartId}"/>
@@ -260,19 +282,43 @@
 
                                                             <Label Grid.Column="1" Text="{Binding Name}" Margin="5,0,0,0" TextColor="Black" VerticalOptions="Center" FontAttributes="Bold" FontSize="Caption">
                                                                 <Label.GestureRecognizers>
-                                                                    <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=CopyToClipboardCommand}" 
-                                                                    CommandParameter="{Binding .}"/>
+                                                                    <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=CopyToClipboardCommand}" CommandParameter="{Binding Name}"/>
                                                                 </Label.GestureRecognizers>
                                                             </Label>
 
                                                             <Label Grid.Column="2" Text="{Binding PartCode}" TextColor="{StaticResource Gray500}" VerticalOptions="Center" HorizontalOptions="Start" FontSize="Caption">
                                                                 <Label.GestureRecognizers>
-                                                                    <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=CopyToClipboardCommand}" 
-                                                                    CommandParameter="{Binding .}"/>
+                                                                    <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=CopyToClipboardCommand}" CommandParameter="{Binding PartCode}"/>
                                                                 </Label.GestureRecognizers>
                                                             </Label>
 
                                                             <Button Grid.Column="3" 
+                                                                    Text="Güncelle" 
+                                                                    FontSize="10" 
+                                                                    HeightRequest="20" 
+                                                                    Padding="0" 
+                                                                    WidthRequest="60"
+                                                                    BackgroundColor="#2196F3" 
+                                                                    TextColor="White"
+                                                                    FontAttributes="Bold"
+                                                                    Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=UpdatePartCommand}" 
+                                                                    CommandParameter="{Binding .}"
+                                                                    IsVisible="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=IsAdminUser}"/>
+
+                                                            <Button Grid.Column="4" 
+                                                                    Text="Sil" 
+                                                                    FontSize="10" 
+                                                                    HeightRequest="20" 
+                                                                    Padding="0"
+                                                                    WidthRequest="40"
+                                                                    BackgroundColor="#D32F2F" 
+                                                                    TextColor="White"
+                                                                    FontAttributes="Bold"
+                                                                    Command="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=DeleteEquipmentPartCommand}" 
+                                                                    CommandParameter="{Binding .}"
+                                                                    IsVisible="{Binding Source={RelativeSource AncestorType={x:Type vm:JobDetailsViewModel}}, Path=IsAdminUser}"/>
+
+                                                            <Button Grid.Column="5" 
                                                                     WidthRequest="70" 
                                                                     HeightRequest="20" 
                                                                     Padding="0" 
@@ -294,6 +340,7 @@
                                                                 </Button.Triggers>
                                                             </Button>
                                                         </Grid>
+
 
                                                         <Grid ColumnDefinitions="*, Auto" Margin="10,0,0,0">
                                                             <Label Grid.Column="0" Text="Parça Dosyaları:" FontSize="Caption" FontAttributes="Italic" TextColor="Black" VerticalOptions="Center"/>

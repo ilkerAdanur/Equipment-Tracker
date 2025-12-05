@@ -17,19 +17,32 @@ namespace EquipmentTracker.Services.Auth
         {
             try
             {
-                // AsNoTracking performans artırır
+                // 1. Önce eski oturumları temizle
+                await CleanupOfflineUsersAsync();
+
+                // 2. Kullanıcıyı bul (Okuma amaçlı)
                 var user = await _context.Users
                     .AsNoTracking()
                     .FirstOrDefaultAsync(u => u.Username == username && u.Password == password);
 
                 if (user != null)
                 {
-                    // Kullanıcıyı online yap
+                    // 3. Güncellemek için izlenen (tracked) nesneyi çek
                     var userToUpdate = await _context.Users.FindAsync(user.Id);
+
                     if (userToUpdate != null)
                     {
                         userToUpdate.IsOnline = true;
+                        userToUpdate.LastActive = DateTime.Now; // <-- BU SATIR EKSİKTİ, EKLENDİ
+
                         await _context.SaveChangesAsync();
+
+                        // Takibi bırak (Döndürülen nesne detached olsun)
+                        _context.Entry(userToUpdate).State = EntityState.Detached;
+
+                        // Döndürülecek nesneyi de güncelle (UI için)
+                        user.IsOnline = true;
+                        user.LastActive = DateTime.Now;
                     }
                 }
 
@@ -37,9 +50,42 @@ namespace EquipmentTracker.Services.Auth
             }
             catch (Exception)
             {
-                // Hatayı burada yutma (catch boş olmasın), yukarı fırlat!
-                // Böylece LoginViewModel hatayı yakalar ve ekrana basar.
                 throw;
+            }
+        }
+
+        public async Task UpdateLastActiveAsync(int userId)
+        {
+            var user = await _context.Users.FindAsync(userId);
+            if (user != null)
+            {
+                user.LastActive = DateTime.Now;
+                user.IsOnline = true;
+                await _context.SaveChangesAsync();
+
+                // Takibi bırak
+                _context.Entry(user).State = EntityState.Detached;
+            }
+        }
+        private async Task CleanupOfflineUsersAsync()
+        {
+            try
+            {
+                // Son 5 dakikadır aktif olmayan ama hala Online görünenleri Offline yap
+                // SQL Raw komutu en performanslısıdır
+                var timeThreshold = DateTime.Now.AddMinutes(-5);
+
+                // Entity Framework Core ile Raw SQL çalıştırıyoruz
+                // MySQL formatı: 'YYYY-MM-DD HH:mm:ss'
+                string formattedTime = timeThreshold.ToString("yyyy-MM-dd HH:mm:ss");
+
+                string sql = $"UPDATE Users SET IsOnline = 0 WHERE IsOnline = 1 AND (LastActive < '{formattedTime}' OR LastActive IS NULL)";
+
+                await _context.Database.ExecuteSqlRawAsync(sql);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Temizlik Hatası: {ex.Message}");
             }
         }
 
@@ -85,5 +131,7 @@ namespace EquipmentTracker.Services.Auth
             var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId);
             return user != null && user.IsOnline;
         }
+        
+
     }
 }

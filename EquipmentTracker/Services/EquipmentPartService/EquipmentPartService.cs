@@ -3,6 +3,7 @@ using EquipmentTracker.Models;
 using Microsoft.EntityFrameworkCore;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace EquipmentTracker.Services.EquipmentPartService
@@ -100,6 +101,7 @@ namespace EquipmentTracker.Services.EquipmentPartService
                 throw;
             }
         }
+
         public async Task TogglePartStatusAsync(int partId, bool isCancelled)
         {
             var part = await _context.EquipmentParts.FindAsync(partId);
@@ -111,7 +113,6 @@ namespace EquipmentTracker.Services.EquipmentPartService
             }
         }
 
-        // Eğer bu sınıfın içinde yoksa, bu yardımcı metodu da en alta ekleyin:
         private string SanitizeFolderName(string name)
         {
             if (string.IsNullOrEmpty(name)) return "Unknown";
@@ -143,10 +144,11 @@ namespace EquipmentTracker.Services.EquipmentPartService
             }
 
             string nextPartId = nextId.ToString();
-            string nextPartCode = $"{equipCode}.{nextPartId}"; 
+            string nextPartCode = $"{equipCode}.{nextPartId}";
 
             return (nextPartId, nextPartCode);
         }
+
         public async Task DeleteEquipmentPart(int partId)
         {
             var partToDelete = await _context.EquipmentParts.FindAsync(partId);
@@ -157,5 +159,101 @@ namespace EquipmentTracker.Services.EquipmentPartService
                 await _context.SaveChangesAsync();
             }
         }
+
+        /// <summary>
+        /// Parça ismini günceller, yerel ve FTP klasörlerini taşır ve veritabanındaki dosya yollarını günceller.
+        /// </summary>
+        public async Task UpdateEquipmentPartNameAsync(EquipmentPart part, string newName)
+        {
+            if (part.Name == newName) return;
+
+            var equipment = part.Equipment;
+            if (equipment == null)
+            {
+                equipment = await _context.Equipments.Include(e => e.Job).FirstOrDefaultAsync(e => e.Id == part.EquipmentId);
+            }
+            if (equipment == null || equipment.Job == null) return;
+
+            var job = equipment.Job;
+
+            string safeJobName = SanitizeFolderName(job.JobName);
+            string safeEquipName = SanitizeFolderName(equipment.Name);
+            string oldSafePartName = SanitizeFolderName(part.Name);
+            string newSafePartName = SanitizeFolderName(newName);
+
+            string jobFolder = $"{job.JobNumber}_{safeJobName}";
+            string equipFolder = $"{job.JobNumber}_{equipment.EquipmentId}_{safeEquipName}";
+            string oldPartFolder = $"{job.JobNumber}_{equipment.EquipmentId}_{part.PartId}_{oldSafePartName}";
+            string newPartFolder = $"{job.JobNumber}_{equipment.EquipmentId}_{part.PartId}_{newSafePartName}";
+
+            string baseAttachmentPath = GetBaseDatabasePath();
+            string oldLocalPath = Path.Combine(baseAttachmentPath, "Attachments", jobFolder, equipFolder, oldPartFolder);
+            string newLocalPath = Path.Combine(baseAttachmentPath, "Attachments", jobFolder, equipFolder, newPartFolder);
+
+            if (Directory.Exists(oldLocalPath))
+            {
+                try
+                {
+                    if (!Directory.Exists(newLocalPath))
+                        Directory.Move(oldLocalPath, newLocalPath);
+                }
+                catch { }
+            }
+
+            string oldLocalImgPath = Path.Combine(baseAttachmentPath, "Attachments", "Images", jobFolder, equipFolder, oldPartFolder);
+            string newLocalImgPath = Path.Combine(baseAttachmentPath, "Attachments", "Images", jobFolder, equipFolder, newPartFolder);
+
+            if (Directory.Exists(oldLocalImgPath))
+            {
+                try
+                {
+                    if (!Directory.Exists(newLocalImgPath))
+                        Directory.Move(oldLocalImgPath, newLocalImgPath);
+                }
+                catch { }
+            }
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    string ftpOldPath = $"Attachments/{jobFolder}/{equipFolder}/{oldPartFolder}";
+                    string ftpNewPath = $"Attachments/{jobFolder}/{equipFolder}/{newPartFolder}";
+                    await _ftpHelper.RenameFileOrDirectoryAsync(ftpOldPath, ftpNewPath);
+
+                    string ftpImagesOldPath = $"Attachments/Images/{jobFolder}/{equipFolder}/{oldPartFolder}";
+                    string ftpImagesNewPath = $"Attachments/Images/{jobFolder}/{equipFolder}/{newPartFolder}";
+                    await _ftpHelper.RenameFileOrDirectoryAsync(ftpImagesOldPath, ftpImagesNewPath);
+                }
+                catch { }
+            });
+
+            var attachments = await _context.EquipmentPartAttachments
+                .Where(a => a.EquipmentPartId == part.Id)
+                .ToListAsync();
+
+            foreach (var att in attachments)
+            {
+                if (!string.IsNullOrEmpty(att.FilePath))
+                    att.FilePath = att.FilePath.Replace(oldPartFolder, newPartFolder);
+
+                if (!string.IsNullOrEmpty(att.ThumbnailPath))
+                    att.ThumbnailPath = att.ThumbnailPath.Replace(oldPartFolder, newPartFolder);
+            }
+
+            part.Name = newName;
+            _context.EquipmentParts.Update(part);
+            await _context.SaveChangesAsync();
+            _context.Entry(part).State = EntityState.Detached;
+        }
+
+        private string GetBaseDatabasePath()
+        {
+            string defaultPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TrackerDatabase");
+            return Preferences.Get("attachment_path", defaultPath);
+        }
+
+        
+
     }
 }

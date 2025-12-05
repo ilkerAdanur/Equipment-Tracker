@@ -52,121 +52,114 @@ namespace EquipmentTracker.Services.AttachmentServices
             return sanitizedName.Trim('_');
         }
 
-        // --- KRİTİK DÜZELTME: Thumbnail Oluşturma ve Kaydetme Mantığı ---
         private async Task ProcessAttachmentInBackground(EquipmentAttachment attachment, string sourceLocalPath, string ftpRelativePath, JobModel job, Equipment equip)
         {
+            // Null Kontrolü
             if (job == null || equip == null) return;
 
-            // UI: İşlem Başladı
             attachment.IsProcessing = true;
-            MainThread.BeginInvokeOnMainThread(() =>
-            {
-                attachment.ProcessingProgress = 0.0;
-                attachment.ThumbnailPath = null;
-            });
+            attachment.ProcessingProgress = 0.0;
 
             using (var scope = _serviceProvider.CreateScope())
             {
                 var dbContext = scope.ServiceProvider.GetRequiredService<DataContext>();
-
-                // -- AŞAMA 1: ANA DOSYA YÜKLEME (DWG) --
                 try
                 {
+                    // İsimleri Hazırla
+                    string safeJobName = SanitizeFolderName(job.JobName);
+                    string safeEquipName = SanitizeFolderName(equip.Name);
+
+                    string jobFolder = $"{job.JobNumber}_{safeJobName}";
+                    string equipFolder = $"{job.JobNumber}_{equip.EquipmentId}_{safeEquipName}";
+
+                    // 1. FTP ANA DOSYA YÜKLEME
                     string ftpFolderPath = Path.GetDirectoryName(ftpRelativePath).Replace("\\", "/");
 
                     var uploadProgress = new Progress<double>(percent =>
                     {
-                        MainThread.BeginInvokeOnMainThread(() => attachment.ProcessingProgress = percent * 0.5);
+                        MainThread.BeginInvokeOnMainThread(() => attachment.ProcessingProgress = percent * 0.6);
                     });
 
-                    // 1.1 Klasörleri oluştur (Parça servisiyle aynı yöntem)
-                    var folders = ftpFolderPath.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
-                    string currentPath = "";
-                    foreach (var folder in folders)
-                    {
-                        currentPath = string.IsNullOrEmpty(currentPath) ? folder : $"{currentPath}/{folder}";
-                        await _ftpHelper.CreateDirectoryAsync(currentPath);
-                    }
+                    // Klasörleri Sırayla Oluştur (Attachments -> Is -> Ekipman)
+                    await _ftpHelper.CreateDirectoryAsync("Attachments");
+                    await _ftpHelper.CreateDirectoryAsync($"Attachments/{jobFolder}");
+                    await _ftpHelper.CreateDirectoryAsync($"Attachments/{jobFolder}/{equipFolder}");
 
-                    // 1.2 Ana dosyayı yükle
+                    // Dosyayı Yükle
                     await _ftpHelper.UploadFileWithProgressAsync(sourceLocalPath, ftpFolderPath, uploadProgress);
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"Ana Dosya Yükleme Hatası: {ex.Message}");
-                }
 
-                // -- AŞAMA 2: KÜÇÜK RESİM OLUŞTURMA (DWG/DXF) --
-                string extension = Path.GetExtension(sourceLocalPath).ToLower();
-                if (extension == ".dwg" || extension == ".dxf")
-                {
-                    string tempThumbPath = null;
-                    string ftpThumbFullPath = null; // DB'ye yazılacak yol
-                    string ftpImagesEquipFolder = null; // FTP'deki son klasör
+                    // 2. THUMBNAIL İŞLEMLERİ (DWG, DXF ve RESİMLER)
+                    string extension = Path.GetExtension(sourceLocalPath).ToLower();
+                    var imageExtensions = new[] { ".jpg", ".jpeg", ".png", ".bmp", ".gif" };
+                    bool isDwg = extension == ".dwg" || extension == ".dxf";
+                    bool isImage = imageExtensions.Contains(extension);
 
-                    // 2.1 İsimlendirme ve Klasör Yapısı
-                    string safeJobName = SanitizeFolderName(job.JobName);
-                    string safeEquipName = SanitizeFolderName(equip.Name);
-                    string thumbFileName = $"{Path.GetFileNameWithoutExtension(sourceLocalPath)}_thumb.png";
-
-                    // Klasör İsimleri
-                    string jobFolder = $"{job.JobNumber}_{safeJobName}";
-                    string equipFolder = $"{job.JobNumber}_{equip.EquipmentId}_{safeEquipName}";
-
-                    // HEDEF FTP YOLLARI (İsteğine uygun yapı)
-                    // Örnek: Attachments/Images/50_Deneme50/50_1_D1/
-                    string ftpImagesBase = "Attachments/Images";
-                    string ftpImagesJobFolder = $"{ftpImagesBase}/{jobFolder}";
-                    ftpImagesEquipFolder = $"{ftpImagesJobFolder}/{equipFolder}";
-
-                    // DB'ye kaydedilecek tam yol
-                    ftpThumbFullPath = $"{ftpImagesEquipFolder}/{thumbFileName}";
-
-                    bool thumbnailCreated = false;
-
-                    try
+                    if (isDwg || isImage)
                     {
-                        MainThread.BeginInvokeOnMainThread(() => attachment.ProcessingProgress = 0.6);
+                        MainThread.BeginInvokeOnMainThread(() => attachment.ProcessingProgress = 0.65);
 
-                        // 2.2 Geçici Klasörde Resmi Oluştur
+                        string realThumbName = $"{Path.GetFileNameWithoutExtension(sourceLocalPath)}_thumb.png";
+
+                        // FTP Resim Yolu: Attachments/Images/Job/Equip
+                        string ftpImagesBase = "Attachments/Images";
+                        string ftpImagesPath = $"{ftpImagesBase}/{jobFolder}/{equipFolder}";
+                        string ftpThumbFullPath = $"{ftpImagesPath}/{realThumbName}";
+
+                        // Geçici Klasör (Benzersiz GUID ile kilitlenmeyi önler)
                         string tempDir = Path.Combine(FileSystem.CacheDirectory, Guid.NewGuid().ToString());
                         if (!Directory.Exists(tempDir)) Directory.CreateDirectory(tempDir);
+                        string safeTempPath = Path.Combine(tempDir, realThumbName);
 
-                        tempThumbPath = Path.Combine(tempDir, thumbFileName);
+                        bool thumbnailCreated = false;
 
                         await Task.Run(() =>
                         {
-                            using (Aspose.CAD.Image cadImage = Aspose.CAD.Image.Load(sourceLocalPath))
+                            try
                             {
-                                var rasterizationOptions = new CadRasterizationOptions
+                                if (isDwg)
                                 {
-                                    PageWidth = 300,
-                                    PageHeight = 300,
-                                    Layouts = new[] { "Model" },
-                                    BackgroundColor = Aspose.CAD.Color.White,
-                                    DrawType = Aspose.CAD.FileFormats.Cad.CadDrawTypeMode.UseObjectColor,
-                                    NoScaling = false
-                                };
-                                cadImage.Save(tempThumbPath, new PngOptions { VectorRasterizationOptions = rasterizationOptions });
+                                    using (Aspose.CAD.Image cadImage = Aspose.CAD.Image.Load(sourceLocalPath))
+                                    {
+                                        var rasterizationOptions = new CadRasterizationOptions
+                                        {
+                                            PageWidth = 300,
+                                            PageHeight = 300,
+                                            Layouts = new[] { "Model" },
+                                            BackgroundColor = Aspose.CAD.Color.White,
+                                            DrawType = Aspose.CAD.FileFormats.Cad.CadDrawTypeMode.UseObjectColor,
+                                            NoScaling = false
+                                        };
+                                        // DXF için Model kontrolü
+                                        if (cadImage is Aspose.CAD.FileFormats.Cad.CadImage cad && cad.Layouts.ContainsKey("Model"))
+                                        {
+                                            rasterizationOptions.Layouts = new[] { "Model" };
+                                        }
+                                        else
+                                        {
+                                            rasterizationOptions.Layouts = null; // Varsayılan
+                                            rasterizationOptions.AutomaticLayoutsScaling = true;
+                                        }
+
+                                        cadImage.Save(safeTempPath, new PngOptions { VectorRasterizationOptions = rasterizationOptions });
+                                    }
+                                }
+                                else if (isImage)
+                                {
+                                    // Resimse direkt kopyala
+                                    File.Copy(sourceLocalPath, safeTempPath, true);
+                                }
+
+                                thumbnailCreated = File.Exists(safeTempPath);
+                            }
+                            catch (Exception imgEx)
+                            {
+                                System.Diagnostics.Debug.WriteLine($"Resim Oluşturma Hatası: {imgEx.Message}");
                             }
                         });
 
-                        if (File.Exists(tempThumbPath))
+                        if (thumbnailCreated)
                         {
-                            thumbnailCreated = true;
-                        }
-                    }
-                    catch (Exception imgEx)
-                    {
-                        Debug.WriteLine($"Resim Oluşturma Hatası: {imgEx.Message}");
-                    }
-
-                    // -- AŞAMA 3: DB GÜNCELLEME VE RESİM YÜKLEME --
-                    if (thumbnailCreated)
-                    {
-                        try
-                        {
-                            // 3.1 ÖNCE VERİTABANINI GÜNCELLE (Garanti olsun)
+                            // Veritabanını Güncelle
                             var dbRecord = await dbContext.EquipmentAttachments.FindAsync(attachment.Id);
                             if (dbRecord != null)
                             {
@@ -174,70 +167,85 @@ namespace EquipmentTracker.Services.AttachmentServices
                                 await dbContext.SaveChangesAsync();
                             }
 
-                            // 3.2 UI'ı Hemen Güncelle (Local path ile)
-                            MainThread.BeginInvokeOnMainThread(() =>
-                            {
-                                attachment.ThumbnailPath = tempThumbPath;
-                                attachment.ProcessingProgress = 0.8;
-                            });
+                            // UI Güncelle (Geçici yolla hemen göster)
+                            MainThread.BeginInvokeOnMainThread(() => attachment.ThumbnailPath = safeTempPath);
 
-                            // 3.3 FTP Klasörlerini Sırayla Oluştur
+                            // FTP'ye Yükle
+                            MainThread.BeginInvokeOnMainThread(() => attachment.ProcessingProgress = 0.8);
+
                             await _ftpHelper.CreateDirectoryAsync("Attachments");
-                            await _ftpHelper.CreateDirectoryAsync(ftpImagesBase);       // Attachments/Images
-                            await _ftpHelper.CreateDirectoryAsync(ftpImagesJobFolder);  // Attachments/Images/50_Deneme
-                            await _ftpHelper.CreateDirectoryAsync(ftpImagesEquipFolder);// Attachments/Images/50_Deneme/50_1_D1
+                            await _ftpHelper.CreateDirectoryAsync(ftpImagesBase);
+                            await _ftpHelper.CreateDirectoryAsync($"{ftpImagesBase}/{jobFolder}");
+                            await _ftpHelper.CreateDirectoryAsync(ftpImagesPath);
 
-                            // 3.4 Dosyayı Yükle
-                            await _ftpHelper.UploadFileAsync(tempThumbPath, ftpImagesEquipFolder);
-                        }
-                        catch (Exception uploadEx)
-                        {
-                            Debug.WriteLine($"Thumbnail Yükleme Hatası: {uploadEx.Message}");
+                            await _ftpHelper.UploadFileAsync(safeTempPath, ftpImagesPath);
                         }
                     }
-                }
 
-                // -- AŞAMA 4: TEMİZLİK VE BİTİŞ --
-                // Sadece kullanıcı (Admin değilse) geçici dosyayı temizle
-                bool isAdmin = App.CurrentUser?.IsAdmin ?? false;
-                if (!isAdmin && File.Exists(sourceLocalPath))
-                {
-                    try { File.Delete(sourceLocalPath); } catch { }
-                }
-
-                MainThread.BeginInvokeOnMainThread(() =>
-                {
-                    attachment.ProcessingProgress = 1.0;
-                    attachment.IsProcessing = false;
-
-                    // UI Refresh tetiklemesi
-                    if (!string.IsNullOrEmpty(attachment.ThumbnailPath))
+                    // Temizlik
+                    bool isAdmin = App.CurrentUser?.IsAdmin ?? false;
+                    if (!isAdmin && File.Exists(sourceLocalPath))
                     {
-                        string temp = attachment.ThumbnailPath;
-                        attachment.ThumbnailPath = null;
-                        attachment.ThumbnailPath = temp;
+                        try { File.Delete(sourceLocalPath); } catch { }
                     }
-                });
+
+                    MainThread.BeginInvokeOnMainThread(() => attachment.ProcessingProgress = 1.0);
+                    await Task.Delay(300);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Ekipman Arka Plan Hatası: {ex.Message}");
+                }
+                finally
+                {
+                    MainThread.BeginInvokeOnMainThread(() =>
+                    {
+                        attachment.IsProcessing = false;
+                        // UI Tetiklemesi
+                        if (!string.IsNullOrEmpty(attachment.ThumbnailPath))
+                        {
+                            var p = attachment.ThumbnailPath;
+                            attachment.ThumbnailPath = null;
+                            attachment.ThumbnailPath = p;
+                        }
+                    });
+                }
             }
         }
 
+
         public async Task<EquipmentAttachment> AddAttachmentAsync(JobModel parentJob, Equipment parentEquipment, FileResult fileToCopy)
         {
-            // 1. Yerel Yolları Hazırla
-            string dbPath = GetBaseDatabasePath();
-            string baseAttachmentPath = Path.Combine(dbPath, "Attachments");
-
+            // 1. Klasör İsimlerini Hazırla
             string safeJobName = SanitizeFolderName(parentJob.JobName);
             string safeEquipName = SanitizeFolderName(parentEquipment.Name);
 
             string jobFolder = $"{parentJob.JobNumber}_{safeJobName}";
             string equipFolder = $"{parentJob.JobNumber}_{parentEquipment.EquipmentId}_{safeEquipName}";
 
-            string targetDirectory = Path.Combine(baseAttachmentPath, jobFolder, equipFolder);
-            if (!Directory.Exists(targetDirectory)) Directory.CreateDirectory(targetDirectory);
+            // 2. HEDEF KONUMLAR (Admin vs User Ayrımı)
+            // Bu kısım paylaştığınız kodda eksikti.
+            string localTargetDir;
 
-            // 2. Dosyayı Kopyala
-            string uniqueFilePath = GetUniqueFilePath(targetDirectory, fileToCopy.FileName);
+            if (IsAdmin)
+            {
+                // Admin: Kalıcı Klasör (Belgelerim/TrackerDatabase/...)
+                string dbPath = GetBaseDatabasePath();
+                string baseAttachmentPath = Path.Combine(dbPath, "Attachments");
+                localTargetDir = Path.Combine(baseAttachmentPath, jobFolder, equipFolder);
+            }
+            else
+            {
+                // Normal User: Geçici Klasör (Cache/TempUploads)
+                // Dosyalar burada kalıcı olmaz, FTP'ye gidince silinir.
+                localTargetDir = Path.Combine(FileSystem.CacheDirectory, "TempUploads");
+            }
+
+            // Klasör yoksa oluştur
+            if (!Directory.Exists(localTargetDir)) Directory.CreateDirectory(localTargetDir);
+
+            // 3. Dosyayı Kopyala (İsim çakışmasını önleyerek)
+            string uniqueFilePath = GetUniqueFilePath(localTargetDir, fileToCopy.FileName);
             string uniqueFileName = Path.GetFileName(uniqueFilePath);
 
             using (var sourceStream = await fileToCopy.OpenReadAsync())
@@ -246,16 +254,15 @@ namespace EquipmentTracker.Services.AttachmentServices
                 await sourceStream.CopyToAsync(targetStream);
             }
 
-            // 3. DB Kaydı (Thumbnail başlangıçta NULL)
             string ftpRelativePath = $"Attachments/{jobFolder}/{equipFolder}/{uniqueFileName}";
 
             var newAttachment = new EquipmentAttachment
             {
                 FileName = uniqueFileName,
-                FilePath = ftpRelativePath,
+                FilePath = ftpRelativePath, // Relative Path (Göreli Yol)
                 ThumbnailPath = null,
                 EquipmentId = parentEquipment.Id,
-                IsProcessing = true,
+                IsProcessing = true, // Yükleme başlıyor
                 ProcessingProgress = 0
             };
 
@@ -263,7 +270,8 @@ namespace EquipmentTracker.Services.AttachmentServices
             await _context.SaveChangesAsync();
             _context.Entry(newAttachment).State = EntityState.Detached;
 
-            // 4. Arka Plan İşlemini Başlat
+            // 5. Arka Plan İşlemini Başlat
+            // ftpRelativePath parametresini gönderdiğimizden emin oluyoruz.
             _ = Task.Run(() => ProcessAttachmentInBackground(newAttachment, uniqueFilePath, ftpRelativePath, parentJob, parentEquipment));
 
             return newAttachment;

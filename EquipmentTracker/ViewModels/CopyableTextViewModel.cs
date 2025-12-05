@@ -9,6 +9,8 @@ public partial class CopyableTextViewModel : ObservableObject
     private string _originalText;
     private string _currentDisplayText;
     private bool _isCopying;
+    [ObservableProperty]
+    string _text;
 
     public string CurrentDisplayText
     {
@@ -25,6 +27,7 @@ public partial class CopyableTextViewModel : ObservableObject
 
     public CopyableTextViewModel(string text)
     {
+        text = text ?? string.Empty;
         _originalText = text;
         _currentDisplayText = text;
     }

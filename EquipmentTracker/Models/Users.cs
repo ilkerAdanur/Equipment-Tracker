@@ -12,5 +12,6 @@ namespace EquipmentTracker.Models
 
         [ObservableProperty]
         private bool _isOnline;
+        public DateTime? LastActive { get; set; }
     }
 }

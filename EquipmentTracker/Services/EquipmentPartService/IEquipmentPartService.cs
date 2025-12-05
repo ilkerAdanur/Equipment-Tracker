@@ -8,5 +8,6 @@ namespace EquipmentTracker.Services.EquipmentPartService
         Task<(string nextPartId, string nextPartCode)> GetNextPartIdsAsync(Equipment parentEquipment);
         Task DeleteEquipmentPart(int partId);
         Task TogglePartStatusAsync(int partId, bool isCancelled);
+        Task UpdateEquipmentPartNameAsync(EquipmentPart part, string newName);
     }
 }

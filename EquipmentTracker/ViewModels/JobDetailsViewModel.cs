@@ -153,9 +153,10 @@ namespace EquipmentTracker.ViewModels
 
                     _ = Task.Run(DownloadThumbnailsForCurrentJob);
 
-                    JobNameDisplay = new CopyableTextViewModel(CurrentJob.JobName);
-                    JobOwnerDisplay = new CopyableTextViewModel(CurrentJob.JobOwner);
-                    JobDescriptionDisplay = new CopyableTextViewModel(CurrentJob.JobDescription);
+                    JobNameDisplay = new CopyableTextViewModel(CurrentJob.JobName ?? "");
+                    JobOwnerDisplay = new CopyableTextViewModel(CurrentJob.JobOwner ?? "");
+
+                    JobDescriptionDisplay = new CopyableTextViewModel(CurrentJob.JobDescription ?? "");
                     UpdateApprovalStatus();
                 }
                 else
@@ -166,6 +167,42 @@ namespace EquipmentTracker.ViewModels
             catch (Exception ex)
             {
                 await Shell.Current.DisplayAlert("Hata", "İş detayları yüklenemedi: " + ex.Message, "Tamam");
+            }
+            finally
+            {
+                IsBusy = false;
+            }
+        }
+        [RelayCommand]
+        async Task UpdateEquipment(Equipment equipment)
+        {
+            if (equipment == null) return;
+
+            // Yeni ismi iste
+            string newName = await Shell.Current.DisplayPromptAsync(
+                "Ekipman Güncelle",
+                "Yeni ekipman adını giriniz:",
+                initialValue: equipment.Name);
+
+            if (string.IsNullOrWhiteSpace(newName) || newName == equipment.Name) return;
+
+            if (IsBusy) return;
+            IsBusy = true;
+
+            try
+            {
+                // Servisi çağır (Klasörleri ve DB'yi günceller)
+                await _equipmentService.UpdateEquipmentNameAsync(equipment, newName);
+
+                // UI'daki nesneyi güncelle (Observable olduğu için ekran değişir)
+                equipment.Name = newName;
+
+                // Excel'i de güncelle ki liste tutarlı olsun
+                await SaveExcelToDiskAsync();
+            }
+            catch (Exception ex)
+            {
+                await Shell.Current.DisplayAlert("Hata", $"Güncelleme başarısız: {ex.Message}", "Tamam");
             }
             finally
             {
@@ -481,6 +518,7 @@ namespace EquipmentTracker.ViewModels
 
             try
             {
+                // Parça numaralarını al
                 var (nextPartId, nextPartCode) = await _partService.GetNextPartIdsAsync(parentEquipment);
 
                 var newPart = new EquipmentPart
@@ -490,11 +528,15 @@ namespace EquipmentTracker.ViewModels
                     PartCode = nextPartCode
                 };
 
+                // Veritabanına kaydet
                 var savedPart = await _partService.AddNewPartAsync(parentEquipment, newPart);
 
                 if (savedPart != null)
                 {
+                    // UI Listesine Ekle
                     parentEquipment.Parts.Add(savedPart);
+                    
+                    await SaveExcelToDiskAsync();
                 }
             }
             catch (Exception ex)
@@ -599,8 +641,8 @@ namespace EquipmentTracker.ViewModels
                 var fileTypes = new FilePickerFileType(
                     new Dictionary<DevicePlatform, IEnumerable<string>>
                     {
-                        { DevicePlatform.WinUI, new[] { ".pdf", ".dwg", ".jpg", ".png", ".txt" } },
-                        { DevicePlatform.macOS, new[] { "pdf", "dwg", "jpg", "png", "txt" } }
+                        { DevicePlatform.WinUI, new[] { ".pdf", ".dwg", ".jpg", ".png", ".txt","dxf" } },
+                        { DevicePlatform.macOS, new[] { "pdf", "dwg", "jpg", "png", "txt","dxf" } }
                     });
 
                 var pickOptions = new PickOptions
@@ -634,6 +676,7 @@ namespace EquipmentTracker.ViewModels
                 IsBusy = false;
             }
         }
+       
         /// <summary>
         /// Seçilen dosyayı sistemin varsayılan uygulamasıyla açar.
         /// </summary>
@@ -696,10 +739,16 @@ namespace EquipmentTracker.ViewModels
 
             try
             {
+                var fileTypes = new FilePickerFileType(
+                   new Dictionary<DevicePlatform, IEnumerable<string>>
+                   {
+                        { DevicePlatform.WinUI, new[] { ".pdf", ".dwg", ".jpg", ".png", ".txt","dxf" } },
+                        { DevicePlatform.macOS, new[] { "pdf", "dwg", "jpg", "png", "txt","dxf" } }
+                   });
                 var fileResult = await FilePicker.Default.PickAsync(new PickOptions
                 {
                     PickerTitle = "Parça için dosya seçin",
-                    // İzin verilen dosya türlerini burada tanımlayabilirsiniz
+                    FileTypes = fileTypes
                 });
 
                 if (fileResult == null) return; // Kullanıcı iptal etti
@@ -1026,6 +1075,47 @@ namespace EquipmentTracker.ViewModels
             }
         }
 
+        [RelayCommand]
+        async Task UpdatePart(EquipmentPart part)
+        {
+            if (part == null) return;
+
+            // 1. Yeni ismi kullanıcıdan iste
+            string newName = await Shell.Current.DisplayPromptAsync(
+                "Parça Güncelle",
+                "Yeni parça adını giriniz:",
+                initialValue: part.Name);
+
+            // Boşsa veya değişmediyse işlem yapma
+            if (string.IsNullOrWhiteSpace(newName) || newName == part.Name) return;
+
+            if (IsBusy) return;
+            IsBusy = true;
+
+            try
+            {
+                // 2. Servisi Çağır (DB, Klasörler ve Dosya Yolları güncellenir)
+                // Not: EquipmentPartService'e eklediğimiz metodu çağırıyoruz
+                await _partService.UpdateEquipmentPartNameAsync(part, newName);
+
+                // 3. Excel'i Güncelle (Rapor tutarlılığı için)
+                await SaveExcelToDiskAsync();
+
+                await Shell.Current.DisplayAlert("Başarılı", "Parça ismi ve klasör yapısı güncellendi.", "Tamam");
+
+                // 4. SAYFAYI YENİLE (En güvenli yöntem)
+                // Dosya yolları değiştiği için listeyi tazelemek gerekir.
+                await LoadJobDetailsAsync(CurrentJob.Id);
+            }
+            catch (Exception ex)
+            {
+                await Shell.Current.DisplayAlert("Hata", $"Güncelleme başarısız: {ex.Message}", "Tamam");
+            }
+            finally
+            {
+                IsBusy = false;
+            }
+        }
 
 
         [RelayCommand]

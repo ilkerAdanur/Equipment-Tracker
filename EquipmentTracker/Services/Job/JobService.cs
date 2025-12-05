@@ -90,46 +90,6 @@ namespace EquipmentTracker.Services.Job
             return name.Trim();
         }
 
-        //private async Task SeedDataIfNeededAsync()
-        //{
-        //    if (await _context.Jobs.AnyAsync()) return;
-
-        //    var job1 = new JobModel
-        //    {
-        //        JobNumber = "1",
-        //        JobName = "AŞKALE ÇİMENTO PAKET ARITMASI",
-        //        JobOwner = "STH ÇEVRE",
-        //        Date = DateTime.Now,
-        //        JobDescription = "Otomatik oluşturulan örnek veri.",
-        //        MainApproval = ApprovalStatus.Pending
-        //    };
-
-        //    var job2 = new JobModel
-        //    {
-        //        JobNumber = "2",
-        //        JobName = "TRABZON SU ARITMA TESİSİ",
-        //        JobOwner = "TİSKİ",
-        //        Date = DateTime.Now.AddDays(5),
-        //        JobDescription = "Otomatik oluşturulan örnek veri.",
-        //        MainApproval = ApprovalStatus.Approved
-        //    };
-
-        //    if (!await _context.Users.AnyAsync())
-        //    {
-        //        _context.Users.Add(new Users
-        //        {
-        //            Username = "admin",
-        //            Password = "123",
-        //            IsAdmin = true,
-        //            FullName = "System Admin"
-        //        });
-        //        await _context.SaveChangesAsync();
-        //    }
-
-        //    await _context.Jobs.AddRangeAsync(job1, job2);
-        //    await _context.SaveChangesAsync();
-        //}
-
         private async Task SeedDataAsync()
         {
             // A. Varsayılan Admin Kullanıcısı Ekle

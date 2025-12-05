@@ -55,6 +55,7 @@ namespace EquipmentTracker
             StartSessionCheck();
         }
 
+
         // Uygulama Arka Plana Atıldığında (Pil tasarrufu için durdur)
         protected override void OnSleep()
         {
@@ -122,7 +123,8 @@ namespace EquipmentTracker
             {
                 try
                 {
-                    await Task.Delay(5000, token);
+                    // 2 dakikada bir sinyal gönder (MySQL Event 5 dk demiştik, bu süre güvenli)
+                    await Task.Delay(TimeSpan.FromMinutes(2), token);
 
                     if (Connectivity.Current.NetworkAccess != NetworkAccess.Internet) continue;
                     if (CurrentUser == null) continue;
@@ -130,6 +132,11 @@ namespace EquipmentTracker
                     using (var scope = _serviceProvider.CreateScope())
                     {
                         var authService = scope.ServiceProvider.GetRequiredService<IAuthService>();
+
+                        // YENİ: Kalp atışı gönder (LastActive tarihini güncelle)
+                        await authService.UpdateLastActiveAsync(CurrentUser.Id);
+
+                        // İsteğe bağlı: Hala başkası tarafından atılıp atılmadığını kontrol et
                         bool isActive = await authService.IsUserActiveAsync(CurrentUser.Id);
 
                         if (!isActive)
@@ -147,7 +154,7 @@ namespace EquipmentTracker
                     }
                 }
                 catch (OperationCanceledException) { break; }
-                catch { await Task.Delay(5000); } // Hata olursa bekle
+                catch { await Task.Delay(5000); }
             }
         }
 

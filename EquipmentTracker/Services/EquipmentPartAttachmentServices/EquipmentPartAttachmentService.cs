@@ -415,7 +415,6 @@ namespace EquipmentTracker.Services.EquipmentPartAttachmentServices
                             }
                         });
 
-                        // DB Güncelle
                         var dbRecord = await dbContext.EquipmentPartAttachments.FindAsync(attachment.Id);
                         if (dbRecord != null)
                         {
@@ -423,13 +422,10 @@ namespace EquipmentTracker.Services.EquipmentPartAttachmentServices
                             await dbContext.SaveChangesAsync();
                         }
 
-                        // UI Güncelle
                         MainThread.BeginInvokeOnMainThread(() => attachment.ThumbnailPath = safeTempPath);
 
-                        // FTP Yükle
                         MainThread.BeginInvokeOnMainThread(() => attachment.ProcessingProgress = 0.8);
 
-                        // Resim Klasörlerini Sırayla Oluştur
                         await _ftpHelper.CreateDirectoryAsync("Attachments");
                         await _ftpHelper.CreateDirectoryAsync(ftpImagesBase);
                         await _ftpHelper.CreateDirectoryAsync($"{ftpImagesBase}/{jobFolder}");
@@ -439,7 +435,6 @@ namespace EquipmentTracker.Services.EquipmentPartAttachmentServices
                         await _ftpHelper.UploadFileAsync(safeTempPath, ftpImagesPath);
                     }
 
-                    // Temizlik
                     bool isAdmin = App.CurrentUser?.IsAdmin ?? false;
                     if (!isAdmin && File.Exists(sourceLocalPath))
                     {
