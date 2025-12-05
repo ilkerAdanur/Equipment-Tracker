@@ -1,7 +1,4 @@
 ﻿// Dosya: ViewModels/JobDetailsViewModel.cs
-using CommunityToolkit.Maui.Alerts;
-using CommunityToolkit.Maui.Core;
-using CommunityToolkit.Maui.Views;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using EquipmentTracker.Models;
@@ -12,11 +9,8 @@ using EquipmentTracker.Services.EquipmentPartAttachmentServices;
 using EquipmentTracker.Services.EquipmentPartService;
 using EquipmentTracker.Services.EquipmentService;
 using EquipmentTracker.Services.Job;
-using Microsoft.Maui.ApplicationModel.DataTransfer;
 using MiniExcelLibs;
 using System.Collections.ObjectModel;
-using System.Diagnostics; // Hata ayıklama için
-using System.IO;
 using System.Text.RegularExpressions;
 
 namespace EquipmentTracker.ViewModels
@@ -173,12 +167,12 @@ namespace EquipmentTracker.ViewModels
                 IsBusy = false;
             }
         }
+
         [RelayCommand]
         async Task UpdateEquipment(Equipment equipment)
         {
             if (equipment == null) return;
 
-            // Yeni ismi iste
             string newName = await Shell.Current.DisplayPromptAsync(
                 "Ekipman Güncelle",
                 "Yeni ekipman adını giriniz:",
@@ -191,14 +185,13 @@ namespace EquipmentTracker.ViewModels
 
             try
             {
-                // Servisi çağır (Klasörleri ve DB'yi günceller)
+                // 1. Servisi Çağır (Veritabanı ve Klasörler güncellenir)
                 await _equipmentService.UpdateEquipmentNameAsync(equipment, newName);
 
-                // UI'daki nesneyi güncelle (Observable olduğu için ekran değişir)
-                equipment.Name = newName;
-
-                // Excel'i de güncelle ki liste tutarlı olsun
+                // 2. Excel'i Güncelle
                 await SaveExcelToDiskAsync();
+
+                await Shell.Current.DisplayAlert("Başarılı", "Ekipman ismi güncellendi.", "Tamam");
             }
             catch (Exception ex)
             {
@@ -206,8 +199,13 @@ namespace EquipmentTracker.ViewModels
             }
             finally
             {
+                // ÖNCE MEŞGULİYETİ KALDIRIYORUZ
                 IsBusy = false;
             }
+
+            // KİLİT AÇILDIKTAN SONRA SAYFAYI YENİLİYORUZ
+            // Bu sayede yeni isim ve yeni dosya yolları ekrana yansır.
+            await LoadJobDetailsAsync(CurrentJob.Id);
         }
 
         [RelayCommand]
@@ -835,15 +833,18 @@ namespace EquipmentTracker.ViewModels
 
             try
             {
-                // GÜNCELLEME: ID kontrolü ve Servis çağrısı
-                // CurrentJob, UI'dan gelen güncel verileri tutar.
+                // 1. Güncelleme İşlemi (Klasörler ve DB değişir)
                 await _jobService.UpdateJob(CurrentJob.Id, CurrentJob);
 
-                await Shell.Current.DisplayAlert("Başarılı", "İş bilgileri güncellendi.", "Tamam");
+                await Shell.Current.DisplayAlert("Başarılı", "İş bilgileri ve klasörler güncellendi.", "Tamam");
+
+                // 2. KRİTİK EKLEME: Sayfayı Yeniden Yükle!
+                // Bu sayede yeni isimler ve yeni dosya yolları veritabanından taze olarak gelir.
+                await LoadJobDetailsAsync(CurrentJob.Id);
             }
             catch (Exception ex)
             {
-                await Shell.Current.DisplayAlert("Hata", $"Güncelleme sırasında hata oluştu: {ex.Message}", "Tamam");
+                await Shell.Current.DisplayAlert("Hata", $"Güncelleme hatası: {ex.Message}", "Tamam");
             }
             finally
             {
@@ -1080,13 +1081,11 @@ namespace EquipmentTracker.ViewModels
         {
             if (part == null) return;
 
-            // 1. Yeni ismi kullanıcıdan iste
             string newName = await Shell.Current.DisplayPromptAsync(
                 "Parça Güncelle",
                 "Yeni parça adını giriniz:",
                 initialValue: part.Name);
 
-            // Boşsa veya değişmediyse işlem yapma
             if (string.IsNullOrWhiteSpace(newName) || newName == part.Name) return;
 
             if (IsBusy) return;
@@ -1094,29 +1093,26 @@ namespace EquipmentTracker.ViewModels
 
             try
             {
-                // 2. Servisi Çağır (DB, Klasörler ve Dosya Yolları güncellenir)
-                // Not: EquipmentPartService'e eklediğimiz metodu çağırıyoruz
+                // Servisi Çağır
                 await _partService.UpdateEquipmentPartNameAsync(part, newName);
 
-                // 3. Excel'i Güncelle (Rapor tutarlılığı için)
+                // Excel'i Güncelle
                 await SaveExcelToDiskAsync();
 
-                await Shell.Current.DisplayAlert("Başarılı", "Parça ismi ve klasör yapısı güncellendi.", "Tamam");
-
-                // 4. SAYFAYI YENİLE (En güvenli yöntem)
-                // Dosya yolları değiştiği için listeyi tazelemek gerekir.
-                await LoadJobDetailsAsync(CurrentJob.Id);
+                await Shell.Current.DisplayAlert("Başarılı", "Parça ismi güncellendi.", "Tamam");
             }
             catch (Exception ex)
             {
-                await Shell.Current.DisplayAlert("Hata", $"Güncelleme başarısız: {ex.Message}", "Tamam");
+                await Shell.Current.DisplayAlert("Hata", ex.Message, "Tamam");
             }
             finally
             {
                 IsBusy = false;
             }
-        }
 
+            // SAYFAYI YENİLE
+            await LoadJobDetailsAsync(CurrentJob.Id);
+        }
 
         [RelayCommand]
         async Task ToggleEquipmentStatus(Equipment equipment)

@@ -167,86 +167,98 @@ namespace EquipmentTracker.Services.EquipmentPartService
         {
             if (part.Name == newName) return;
 
-            var equipment = part.Equipment;
-            if (equipment == null)
-            {
-                equipment = await _context.Equipments.Include(e => e.Job).FirstOrDefaultAsync(e => e.Id == part.EquipmentId);
-            }
-            if (equipment == null || equipment.Job == null) return;
+            // 1. GÜVENLİ VERİ OKUMA (AsNoTracking)
+            // Parçanın bağlı olduğu ekipmanı ve işi temiz bir şekilde çekelim
+            var equipData = await _context.Equipments
+                .AsNoTracking()
+                .Include(e => e.Job)
+                .FirstOrDefaultAsync(e => e.Id == part.EquipmentId);
 
-            var job = equipment.Job;
+            if (equipData == null || equipData.Job == null) return;
+            var jobData = equipData.Job;
 
-            string safeJobName = SanitizeFolderName(job.JobName);
-            string safeEquipName = SanitizeFolderName(equipment.Name);
+            string safeJobName = SanitizeFolderName(jobData.JobName);
+            string safeEquipName = SanitizeFolderName(equipData.Name);
             string oldSafePartName = SanitizeFolderName(part.Name);
             string newSafePartName = SanitizeFolderName(newName);
 
-            string jobFolder = $"{job.JobNumber}_{safeJobName}";
-            string equipFolder = $"{job.JobNumber}_{equipment.EquipmentId}_{safeEquipName}";
-            string oldPartFolder = $"{job.JobNumber}_{equipment.EquipmentId}_{part.PartId}_{oldSafePartName}";
-            string newPartFolder = $"{job.JobNumber}_{equipment.EquipmentId}_{part.PartId}_{newSafePartName}";
+            string jobFolder = $"{jobData.JobNumber}_{safeJobName}";
+            string equipFolder = $"{jobData.JobNumber}_{equipData.EquipmentId}_{safeEquipName}";
+            string oldPartFolder = $"{jobData.JobNumber}_{equipData.EquipmentId}_{part.PartId}_{oldSafePartName}";
+            string newPartFolder = $"{jobData.JobNumber}_{equipData.EquipmentId}_{part.PartId}_{newSafePartName}";
 
             string baseAttachmentPath = GetBaseDatabasePath();
             string oldLocalPath = Path.Combine(baseAttachmentPath, "Attachments", jobFolder, equipFolder, oldPartFolder);
             string newLocalPath = Path.Combine(baseAttachmentPath, "Attachments", jobFolder, equipFolder, newPartFolder);
 
-            if (Directory.Exists(oldLocalPath))
+            // 2. KLASÖR TAŞIMA
+            try
             {
-                try
+                if (Directory.Exists(oldLocalPath))
                 {
-                    if (!Directory.Exists(newLocalPath))
-                        Directory.Move(oldLocalPath, newLocalPath);
+                    if (Directory.Exists(newLocalPath))
+                    {
+                        foreach (var file in Directory.GetFiles(oldLocalPath))
+                        {
+                            string dest = Path.Combine(newLocalPath, Path.GetFileName(file));
+                            if (!File.Exists(dest)) File.Move(file, dest);
+                        }
+                        try { Directory.Delete(oldLocalPath, true); } catch { }
+                    }
+                    else { Directory.Move(oldLocalPath, newLocalPath); }
                 }
-                catch { }
-            }
 
-            string oldLocalImgPath = Path.Combine(baseAttachmentPath, "Attachments", "Images", jobFolder, equipFolder, oldPartFolder);
-            string newLocalImgPath = Path.Combine(baseAttachmentPath, "Attachments", "Images", jobFolder, equipFolder, newPartFolder);
-
-            if (Directory.Exists(oldLocalImgPath))
-            {
-                try
+                // Images
+                string oldImg = Path.Combine(baseAttachmentPath, "Attachments", "Images", jobFolder, equipFolder, oldPartFolder);
+                string newImg = Path.Combine(baseAttachmentPath, "Attachments", "Images", jobFolder, equipFolder, newPartFolder);
+                if (Directory.Exists(oldImg))
                 {
-                    if (!Directory.Exists(newLocalImgPath))
-                        Directory.Move(oldLocalImgPath, newLocalImgPath);
+                    if (Directory.Exists(newImg))
+                    {
+                        foreach (var file in Directory.GetFiles(oldImg))
+                        {
+                            string dest = Path.Combine(newImg, Path.GetFileName(file));
+                            if (!File.Exists(dest)) File.Move(file, dest);
+                        }
+                        try { Directory.Delete(oldImg, true); } catch { }
+                    }
+                    else { Directory.Move(oldImg, newImg); }
                 }
-                catch { }
             }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Part Klasör Hatası: {ex.Message}"); }
 
+            // 3. FTP
             _ = Task.Run(async () =>
             {
                 try
                 {
-                    string ftpOldPath = $"Attachments/{jobFolder}/{equipFolder}/{oldPartFolder}";
-                    string ftpNewPath = $"Attachments/{jobFolder}/{equipFolder}/{newPartFolder}";
-                    await _ftpHelper.RenameFileOrDirectoryAsync(ftpOldPath, ftpNewPath);
+                    string baseFtp = $"Attachments/{jobFolder}/{equipFolder}";
+                    await _ftpHelper.RenameFileOrDirectoryAsync($"{baseFtp}/{oldPartFolder}", $"{baseFtp}/{newPartFolder}");
 
-                    string ftpImagesOldPath = $"Attachments/Images/{jobFolder}/{equipFolder}/{oldPartFolder}";
-                    string ftpImagesNewPath = $"Attachments/Images/{jobFolder}/{equipFolder}/{newPartFolder}";
-                    await _ftpHelper.RenameFileOrDirectoryAsync(ftpImagesOldPath, ftpImagesNewPath);
+                    string baseFtpImg = $"Attachments/Images/{jobFolder}/{equipFolder}";
+                    await _ftpHelper.RenameFileOrDirectoryAsync($"{baseFtpImg}/{oldPartFolder}", $"{baseFtpImg}/{newPartFolder}");
                 }
                 catch { }
             });
 
-            var attachments = await _context.EquipmentPartAttachments
-                .Where(a => a.EquipmentPartId == part.Id)
-                .ToListAsync();
-
+            // 4. DOSYA YOLLARI
+            var attachments = await _context.EquipmentPartAttachments.Where(a => a.EquipmentPartId == part.Id).ToListAsync();
             foreach (var att in attachments)
             {
-                if (!string.IsNullOrEmpty(att.FilePath))
-                    att.FilePath = att.FilePath.Replace(oldPartFolder, newPartFolder);
-
-                if (!string.IsNullOrEmpty(att.ThumbnailPath))
-                    att.ThumbnailPath = att.ThumbnailPath.Replace(oldPartFolder, newPartFolder);
+                if (att.FilePath != null) att.FilePath = att.FilePath.Replace(oldPartFolder, newPartFolder);
+                if (att.ThumbnailPath != null) att.ThumbnailPath = att.ThumbnailPath.Replace(oldPartFolder, newPartFolder);
             }
 
+            // 5. KAYIT
             part.Name = newName;
+
+            // *** KRİTİK DÜZELTME ***
+            part.Equipment = null; // İlişkiyi kopar
+
             _context.EquipmentParts.Update(part);
             await _context.SaveChangesAsync();
             _context.Entry(part).State = EntityState.Detached;
         }
-
         private string GetBaseDatabasePath()
         {
             string defaultPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TrackerDatabase");

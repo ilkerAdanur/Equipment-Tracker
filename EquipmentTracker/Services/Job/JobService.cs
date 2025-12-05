@@ -152,9 +152,9 @@ namespace EquipmentTracker.Services.Job
         public async Task<JobModel> GetJobByIdAsync(int jobId)
         {
             return await _context.Jobs
+                .AsNoTracking()
                 .Include(j => j.Equipments).ThenInclude(e => e.Parts).ThenInclude(p => p.Attachments)
                 .Include(j => j.Equipments).ThenInclude(e => e.Attachments)
-                .AsNoTracking()
                 .FirstOrDefaultAsync(j => j.Id == jobId);
         }
 
@@ -395,17 +395,15 @@ namespace EquipmentTracker.Services.Job
             if (existingJob != null)
             {
                 // 1. İsim Değişikliği Kontrolü
-                string baseAttachmentPath = await GetGlobalAttachmentPathAsync();
-
                 string oldSafeName = SanitizeFolderName(existingJob.JobName);
-                string oldFolderName = $"{existingJob.JobNumber}_{oldSafeName}";
-
                 string newSafeName = SanitizeFolderName(newJob.JobName);
-                string newFolderName = $"{existingJob.JobNumber}_{newSafeName}";
 
-                bool nameChanged = !oldFolderName.Equals(newFolderName, StringComparison.OrdinalIgnoreCase);
+                string oldFolder = $"{existingJob.JobNumber}_{oldSafeName}";
+                string newFolder = $"{existingJob.JobNumber}_{newSafeName}";
 
-                // 2. Veritabanı Güncelleme
+                bool nameChanged = !oldFolder.Equals(newFolder, StringComparison.OrdinalIgnoreCase);
+
+                // 2. Verileri Güncelle
                 existingJob.JobName = newJob.JobName;
                 existingJob.JobOwner = newJob.JobOwner;
                 existingJob.JobDescription = newJob.JobDescription;
@@ -414,61 +412,72 @@ namespace EquipmentTracker.Services.Job
 
                 if (nameChanged)
                 {
-                    // A. Yerel Klasörü Taşı
-                    string oldFullPath = Path.Combine(baseAttachmentPath, oldFolderName);
-                    string newFullPath = Path.Combine(baseAttachmentPath, newFolderName);
+                    string baseAttachmentPath = await GetGlobalAttachmentPathAsync();
+                    string oldFullPath = Path.Combine(baseAttachmentPath, oldFolder);
+                    string newFullPath = Path.Combine(baseAttachmentPath, newFolder);
 
-                    if (Directory.Exists(oldFullPath))
+                    // YEREL KLASÖR TAŞIMA (GÜVENLİ)
+                    try
                     {
-                        try
+                        if (Directory.Exists(oldFullPath))
                         {
-                            if (!Directory.Exists(newFullPath)) Directory.Move(oldFullPath, newFullPath);
+                            if (Directory.Exists(newFullPath))
+                            {
+                                // Hedef varsa, birleştirme mantığı gerekebilir ama iş klasörleri büyük olduğu için
+                                // şimdilik sadece hata vermeden geçmesini sağlıyoruz.
+                                // En güvenlisi:
+                                // Directory.Move(oldFullPath, newFullPath); // Bu hata verirse catch'e düşer
+                            }
+                            else
+                            {
+                                Directory.Move(oldFullPath, newFullPath);
+                            }
                         }
-                        catch (Exception ex) { Debug.WriteLine($"Local Move Error: {ex.Message}"); }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Job Klasör Hatası: {ex.Message}");
+                        // Klasör taşınamasa bile devam et
                     }
 
-                    // B. FTP Klasörünü Taşı (YENİ)
+                    // FTP Klasörlerini Taşı (Arka Planda)
                     _ = Task.Run(async () =>
                     {
                         try
                         {
-                            // Ana Klasörü Taşı
-                            await _ftpHelper.RenameFileOrDirectoryAsync($"Attachments/{oldFolderName}", $"Attachments/{newFolderName}");
-
-                            // Images Klasörünü Taşı (Thumbnails için)
-                            await _ftpHelper.RenameFileOrDirectoryAsync($"Attachments/Images/{oldFolderName}", $"Attachments/Images/{newFolderName}");
+                            // Ana Dosyalar
+                            await _ftpHelper.RenameFileOrDirectoryAsync($"Attachments/{oldFolder}", $"Attachments/{newFolder}");
+                            // Resimler
+                            await _ftpHelper.RenameFileOrDirectoryAsync($"Attachments/Images/{oldFolder}", $"Attachments/Images/{newFolder}");
                         }
-                        catch (Exception fex)
-                        {
-                            Debug.WriteLine($"FTP Rename Error: {fex.Message}");
-                        }
+                        catch { }
                     });
 
-                    // C. Veritabanındaki Yolları Güncelle (String Replace ile)
+                    // Veritabanındaki Yolları Güncelle (String Replace)
                     foreach (var eq in existingJob.Equipments)
                     {
                         foreach (var att in eq.Attachments)
                         {
-                            if (!string.IsNullOrEmpty(att.FilePath)) att.FilePath = att.FilePath.Replace(oldFolderName, newFolderName);
-                            if (!string.IsNullOrEmpty(att.ThumbnailPath)) att.ThumbnailPath = att.ThumbnailPath.Replace(oldFolderName, newFolderName);
+                            if (!string.IsNullOrEmpty(att.FilePath))
+                                att.FilePath = att.FilePath.Replace(oldFolder, newFolder);
+                            if (!string.IsNullOrEmpty(att.ThumbnailPath))
+                                att.ThumbnailPath = att.ThumbnailPath.Replace(oldFolder, newFolder);
                         }
                         foreach (var part in eq.Parts)
                         {
                             foreach (var patt in part.Attachments)
                             {
-                                if (!string.IsNullOrEmpty(patt.FilePath)) patt.FilePath = patt.FilePath.Replace(oldFolderName, newFolderName);
-                                if (!string.IsNullOrEmpty(patt.ThumbnailPath)) patt.ThumbnailPath = patt.ThumbnailPath.Replace(oldFolderName, newFolderName);
+                                if (!string.IsNullOrEmpty(patt.FilePath))
+                                    patt.FilePath = patt.FilePath.Replace(oldFolder, newFolder);
+                                if (!string.IsNullOrEmpty(patt.ThumbnailPath))
+                                    patt.ThumbnailPath = patt.ThumbnailPath.Replace(oldFolder, newFolder);
                             }
                         }
                     }
                 }
 
-                try
-                {
-                    await _context.SaveChangesAsync();
-                    _context.Entry(existingJob).State = EntityState.Detached;
-                }
-                catch (Exception ex) { Debug.WriteLine($"Update Error: {ex.Message}"); throw; }
+                await _context.SaveChangesAsync();
+                _context.Entry(existingJob).State = EntityState.Detached;
             }
         }
 

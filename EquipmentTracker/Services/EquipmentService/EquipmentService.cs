@@ -17,12 +17,7 @@ namespace EquipmentTracker.Services.EquipmentService
             _context = context;
             _ftpHelper = ftpHelper;
         }
-        private string GetCurrentAttachmentPath()
-        {
-            string defaultPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TrackerDatabase");
-            string basePath = Preferences.Get("attachment_path", defaultPath);
-            return Path.Combine(basePath, "Attachments");
-        }
+        
         private string GetBaseDatabasePath()
         {
             string defaultPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TrackerDatabase");
@@ -176,113 +171,109 @@ namespace EquipmentTracker.Services.EquipmentService
         }
         public async Task UpdateEquipmentNameAsync(Equipment equipment, string newName)
         {
-            // 1. Değişiklik Yoksa Çık
             if (equipment.Name == newName) return;
 
-            // Job bilgisini çek (Klasör yolları için gerekli)
-            // Eğer equipment.Job null ise veritabanından çekelim
-            var job = equipment.Job;
-            if (job == null)
-            {
-                job = await _context.Jobs.FindAsync(equipment.JobId);
-            }
-            if (job == null) return;
+            // 1. GÜVENLİ VERİ OKUMA: Çakışmayı önlemek için AsNoTracking kullanıyoruz.
+            // equipment.Job dolu gelse bile, biz veritabanından temiz bir kopya alalım.
+            var jobData = await _context.Jobs
+                .AsNoTracking()
+                .FirstOrDefaultAsync(j => j.Id == equipment.JobId);
 
-            // 2. İsimleri ve Klasörleri Hazırla
-            string safeJobName = SanitizeFolderName(job.JobName);
+            if (jobData == null) return;
+
+            // İsimleri Hazırla
+            string safeJobName = SanitizeFolderName(jobData.JobName);
             string oldSafeEquipName = SanitizeFolderName(equipment.Name);
             string newSafeEquipName = SanitizeFolderName(newName);
 
-            string jobFolder = $"{job.JobNumber}_{safeJobName}";
+            string jobFolder = $"{jobData.JobNumber}_{safeJobName}";
+            string oldEquipFolder = $"{jobData.JobNumber}_{equipment.EquipmentId}_{oldSafeEquipName}";
+            string newEquipFolder = $"{jobData.JobNumber}_{equipment.EquipmentId}_{newSafeEquipName}";
 
-            string oldEquipFolder = $"{job.JobNumber}_{equipment.EquipmentId}_{oldSafeEquipName}";
-            string newEquipFolder = $"{job.JobNumber}_{equipment.EquipmentId}_{newSafeEquipName}";
-
-            // 3. Yerel Klasörü Taşı (Varsa)
             string baseAttachmentPath = GetBaseDatabasePath();
             string oldLocalPath = Path.Combine(baseAttachmentPath, "Attachments", jobFolder, oldEquipFolder);
             string newLocalPath = Path.Combine(baseAttachmentPath, "Attachments", jobFolder, newEquipFolder);
 
-            // Yerel klasör varsa ismini değiştir
-            if (Directory.Exists(oldLocalPath))
+            // 2. KLASÖR İŞLEMLERİ (Try-Catch ile sarılı)
+            try
             {
-                try
+                if (Directory.Exists(oldLocalPath))
                 {
-                    if (!Directory.Exists(newLocalPath))
+                    if (Directory.Exists(newLocalPath))
+                    {
+                        // Merge (İçindekileri taşı)
+                        foreach (var file in Directory.GetFiles(oldLocalPath))
+                        {
+                            string dest = Path.Combine(newLocalPath, Path.GetFileName(file));
+                            if (!File.Exists(dest)) File.Move(file, dest);
+                        }
+                        foreach (var dir in Directory.GetDirectories(oldLocalPath))
+                        {
+                            string dest = Path.Combine(newLocalPath, Path.GetFileName(dir));
+                            if (!Directory.Exists(dest)) Directory.Move(dir, dest);
+                        }
+                        try { Directory.Delete(oldLocalPath, true); } catch { }
+                    }
+                    else
+                    {
                         Directory.Move(oldLocalPath, newLocalPath);
+                    }
                 }
-                catch (Exception ex)
+
+                // Images Klasörü
+                string oldImg = Path.Combine(baseAttachmentPath, "Attachments", "Images", jobFolder, oldEquipFolder);
+                string newImg = Path.Combine(baseAttachmentPath, "Attachments", "Images", jobFolder, newEquipFolder);
+                if (Directory.Exists(oldImg))
                 {
-                    System.Diagnostics.Debug.WriteLine($"Yerel Klasör Taşıma Hatası: {ex.Message}");
+                    if (Directory.Exists(newImg))
+                    {
+                        foreach (var file in Directory.GetFiles(oldImg))
+                        {
+                            string dest = Path.Combine(newImg, Path.GetFileName(file));
+                            if (!File.Exists(dest)) File.Move(file, dest);
+                        }
+                        try { Directory.Delete(oldImg, true); } catch { }
+                    }
+                    else { Directory.Move(oldImg, newImg); }
                 }
             }
-            // Yerel 'Images' klasörünü de taşı (Thumbnail'ler için)
-            string oldLocalImgPath = Path.Combine(baseAttachmentPath, "Attachments", "Images", jobFolder, oldEquipFolder);
-            string newLocalImgPath = Path.Combine(baseAttachmentPath, "Attachments", "Images", jobFolder, newEquipFolder);
-            if (Directory.Exists(oldLocalImgPath))
-            {
-                try { Directory.Move(oldLocalImgPath, newLocalImgPath); } catch { }
-            }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Klasör Hatası: {ex.Message}"); }
 
-
-            // 4. FTP Klasörünü Taşı (Arka Planda)
+            // 3. FTP İŞLEMİ
             _ = Task.Run(async () =>
             {
                 try
                 {
-                    // Ana Klasör: Attachments/Job/EskiEquip -> Attachments/Job/YeniEquip
-                    string ftpOldPath = $"Attachments/{jobFolder}/{oldEquipFolder}";
-                    string ftpNewPath = $"Attachments/{jobFolder}/{newEquipFolder}";
-                    await _ftpHelper.RenameFileOrDirectoryAsync(ftpOldPath, ftpNewPath);
-
-                    // Resim Klasörü: Attachments/Images/Job/EskiEquip -> ...
-                    string ftpImagesOldPath = $"Attachments/Images/{jobFolder}/{oldEquipFolder}";
-                    string ftpImagesNewPath = $"Attachments/Images/{jobFolder}/{newEquipFolder}";
-                    await _ftpHelper.RenameFileOrDirectoryAsync(ftpImagesOldPath, ftpImagesNewPath);
+                    await _ftpHelper.RenameFileOrDirectoryAsync($"Attachments/{jobFolder}/{oldEquipFolder}", $"Attachments/{jobFolder}/{newEquipFolder}");
+                    await _ftpHelper.RenameFileOrDirectoryAsync($"Attachments/Images/{jobFolder}/{oldEquipFolder}", $"Attachments/Images/{jobFolder}/{newEquipFolder}");
                 }
-                catch (Exception fex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"FTP Rename Error: {fex.Message}");
-                }
+                catch { }
             });
 
-            // 5. Veritabanı Yollarını Güncelle (String Replace ile)
-            // Ekipmana ait dosyaların yollarını güncelle
-            var attachments = await _context.EquipmentAttachments
-                .Where(a => a.EquipmentId == equipment.Id).ToListAsync();
-
+            // 4. DOSYA YOLLARINI GÜNCELLE
+            var attachments = await _context.EquipmentAttachments.Where(a => a.EquipmentId == equipment.Id).ToListAsync();
             foreach (var att in attachments)
             {
-                if (!string.IsNullOrEmpty(att.FilePath))
-                    att.FilePath = att.FilePath.Replace(oldEquipFolder, newEquipFolder);
-
-                if (!string.IsNullOrEmpty(att.ThumbnailPath))
-                    att.ThumbnailPath = att.ThumbnailPath.Replace(oldEquipFolder, newEquipFolder);
+                if (att.FilePath != null) att.FilePath = att.FilePath.Replace(oldEquipFolder, newEquipFolder);
+                if (att.ThumbnailPath != null) att.ThumbnailPath = att.ThumbnailPath.Replace(oldEquipFolder, newEquipFolder);
             }
 
-            // Ekipmanın Parçalarına ait dosyaların yollarını güncelle
-            var parts = await _context.EquipmentParts
-                .Where(p => p.EquipmentId == equipment.Id)
-                .Include(p => p.Attachments)
-                .ToListAsync();
-
-            foreach (var part in parts)
+            var parts = await _context.EquipmentParts.Include(p => p.Attachments).Where(p => p.EquipmentId == equipment.Id).ToListAsync();
+            foreach (var p in parts)
             {
-                foreach (var patt in part.Attachments)
+                foreach (var patt in p.Attachments)
                 {
-                    if (!string.IsNullOrEmpty(patt.FilePath))
-                        patt.FilePath = patt.FilePath.Replace(oldEquipFolder, newEquipFolder);
-
-                    if (!string.IsNullOrEmpty(patt.ThumbnailPath))
-                        patt.ThumbnailPath = patt.ThumbnailPath.Replace(oldEquipFolder, newEquipFolder);
+                    if (patt.FilePath != null) patt.FilePath = patt.FilePath.Replace(oldEquipFolder, newEquipFolder);
+                    if (patt.ThumbnailPath != null) patt.ThumbnailPath = patt.ThumbnailPath.Replace(oldEquipFolder, newEquipFolder);
                 }
             }
 
-            // 6. İsmi Güncelle ve Kaydet
+            // 5. GÜNCELLEME VE KAYIT
             equipment.Name = newName;
 
-            // Eğer EquipmentCode isme bağlıysa onu da güncellemek gerekebilir ama genelde sabit kalır.
-            // equipment.EquipmentCode = ... (Gerekirse buraya ekleyin)
+            // *** KRİTİK DÜZELTME ***
+            // İlişkili nesneyi boşaltıyoruz ki EF Core onu tekrar update etmeye çalışıp hata vermesin.
+            equipment.Job = null;
 
             _context.Equipments.Update(equipment);
             await _context.SaveChangesAsync();

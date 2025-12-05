@@ -117,34 +117,35 @@ namespace EquipmentTracker.Services
             return $"{baseHost}/{cleanSuffix}";
         }
 
-        public async Task RenameFileOrDirectoryAsync(string oldPathSuffix, string newPathSuffix)
+        public async Task RenameFileOrDirectoryAsync(string oldPath, string newPath)
         {
             if (string.IsNullOrEmpty(Host)) return;
 
             try
             {
-                // Eski yol (ftp://.../Attachments/EskiIsim)
-                string targetUrl = CombineFtpPath(oldPathSuffix);
+                // Eski yol (Örn: Attachments/EskiIsim)
+                string targetUrl = CombineFtpPath(oldPath);
 
-                FtpWebRequest request = (FtpWebRequest)WebRequest.Create(targetUrl);
+                var request = (FtpWebRequest)WebRequest.Create(targetUrl);
                 request.Method = WebRequestMethods.Ftp.Rename;
                 request.Credentials = new NetworkCredential(User, Pass);
 
-                // PÜF NOKTASI: Bazı sunucular RenameTo için kök dizinden başlayan tam yol ister.
-                // newPathSuffix şuna benzemeli: "/public_html/Attachments/YeniIsim" veya sadece "Attachments/YeniIsim"
-                // Bizim CombineFtpPath metodu "ftp://" ekliyor, onu kullanmayacağız.
-                // Direkt parametre olarak gelen temiz yolu veriyoruz.
-                request.RenameTo = newPathSuffix;
+                // Yeni yol (Sadece string path olarak: Attachments/YeniIsim)
+                request.RenameTo = newPath;
 
-                using (var response = (FtpWebResponse)await request.GetResponseAsync())
-                {
-                    // Başarılı
-                }
+                using (var response = (FtpWebResponse)await request.GetResponseAsync()) { }
             }
-            catch (Exception ex)
+            catch (WebException ex)
             {
+                // Hata 550: Dosya/Klasör yok demektir.
+                // Eğer eski klasör zaten yoksa hata verme, devam et (DB güncellensin)
+                var response = (FtpWebResponse)ex.Response;
+                if (response.StatusCode == FtpStatusCode.ActionNotTakenFileUnavailable)
+                {
+                    return;
+                }
+                // Diğer hataları logla
                 System.Diagnostics.Debug.WriteLine($"FTP Rename Hatası: {ex.Message}");
-                // Hata olsa bile devam etsin, belki yeni klasör oluşturulup dosyalar oraya atılır
             }
         }
 
